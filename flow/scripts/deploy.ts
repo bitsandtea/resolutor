@@ -1,27 +1,53 @@
-import { ethers } from "hardhat";
+import "@nomicfoundation/hardhat-ethers";
+import hre from "hardhat";
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const unlockTime = currentTimestampInSeconds + 60;
+  console.log("Deploying contracts to Flow EVM testnet...");
 
-  const lockedAmount = ethers.parseEther("0.001");
-
-  const lock = await ethers.deployContract("Lock", [unlockTime], {
-    value: lockedAmount,
-  });
-
-  await lock.waitForDeployment();
-
+  const [deployer] = await hre.ethers.getSigners();
+  console.log("Deploying with account:", deployer.address);
   console.log(
-    `Lock with ${ethers.formatEther(
-      lockedAmount
-    )}ETH and unlock timestamp ${unlockTime} deployed to ${lock.target}`
+    "Account balance:",
+    hre.ethers.formatEther(await deployer.provider.getBalance(deployer.address))
   );
+
+  // Deploy AgreementFactory
+  console.log("\nDeploying AgreementFactory...");
+  const AgreementFactory = await hre.ethers.getContractFactory(
+    "AgreementFactory"
+  );
+  const factory = await AgreementFactory.deploy();
+  await factory.waitForDeployment();
+
+  const factoryAddress = await factory.getAddress();
+  console.log("AgreementFactory deployed to:", factoryAddress);
+
+  // Get the implementation address
+  const implementationAddress = await factory.implementation();
+  console.log(
+    "MultiSigAgreement implementation deployed to:",
+    implementationAddress
+  );
+
+  console.log("\nDeployment completed!");
+  console.log("Factory address:", factoryAddress);
+  console.log("Implementation address:", implementationAddress);
+
+  // Optionally deploy a mock USDC token for testing
+  if (process.env.DEPLOY_MOCK_TOKEN === "true") {
+    console.log("\nDeploying Mock USDC token...");
+    const MockToken = await hre.ethers.getContractFactory("MockERC20");
+    const mockUSDC = await MockToken.deploy("Flow USDC", "FUSDC");
+    await mockUSDC.waitForDeployment();
+
+    const mockUSDCAddress = await mockUSDC.getAddress();
+    console.log("Mock USDC deployed to:", mockUSDCAddress);
+  }
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
