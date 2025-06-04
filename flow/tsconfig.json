@@ -6,6 +6,15 @@
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
-  }
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "declaration": true,
+    "outDir": "./dist",
+    "typeRoots": ["flow/node_modules/@types"]
+  },
+  "include": ["flow/scripts", "flow/test", "flow/typechain-types"],
+  "files": ["hardhat.config.ts"]
 }
