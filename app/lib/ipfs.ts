@@ -1,10 +1,23 @@
-import { Web3Storage } from "web3.storage";
+import { create } from "@web3-storage/w3up-client";
 
-const client = new Web3Storage({ token: process.env.WEB3_STORAGE_TOKEN! });
+let client: Awaited<ReturnType<typeof create>> | null = null;
+
+async function getClient() {
+  if (!client) {
+    client = await create();
+
+    // Set the current space using the provided DID
+    await client.setCurrentSpace(
+      "did:key:z6MkiwJ3GqvF3eG4UUNNxpgkvWkVVdkhGnLuFgyAxqF9M3Br"
+    );
+  }
+  return client;
+}
 
 export async function uploadToIPFS(file: File): Promise<string> {
-  const cid = await client.put([file]);
-  return cid;
+  const client = await getClient();
+  const cid = await client.uploadFile(file);
+  return cid.toString();
 }
 
 export async function uploadJsonToIPFS(data: object): Promise<string> {
