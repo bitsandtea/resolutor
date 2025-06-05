@@ -1,83 +1,16 @@
 "use client";
 
+import { rentalLeaseDefinition } from "@/contracts/defined";
 import React, { ChangeEvent, useEffect, useState } from "react";
+import ContractFormStep from "./components/ContractFormStep";
+import ContractSelectionStep from "./components/ContractSelectionStep";
+import { ContractDefinition, ContractFormData, FormField } from "./types";
 
 // --- START: Type Definitions ---
-interface PlaceholderDefinition {
-  id: string;
-  label: string;
-  dataType:
-    | "string"
-    | "text"
-    | "number"
-    | "integer"
-    | "date"
-    | "boolean"
-    | "enum";
-  description?: string;
-  required?: boolean;
-  sectionId?: string;
-  defaultValue?: any;
-  options?: { value: string; label: string }[];
-  validationRules?: any;
-  uiHint?: "textarea" | "checkbox" | "radio" | "dropdown" | string;
-  dependsOn?: {
-    placeholderId: string;
-    value: any;
-    condition?: "equals" | "notEquals" | "contains";
-  };
-}
-
-interface ContractDefinition {
-  templateMeta: {
-    templateId: string;
-    title: string;
-    version?: string;
-    description?: string;
-    templateFile?: string; // Path to the .md template, relative to /public
-  };
-  parties?: Array<{ roleId: string; roleLabel: string; [key: string]: any }>;
-  sections?: Array<{
-    sectionId: string;
-    title: string;
-    description?: string;
-    displayOrder?: number;
-  }>;
-  placeholders: PlaceholderDefinition[];
-  signatureBlocks?: Array<{ [key: string]: any }>;
-}
-
-interface FormField {
-  id: string;
-  label: string;
-  type:
-    | "text"
-    | "date"
-    | "number"
-    | "textarea"
-    | "checkbox"
-    | "radio"
-    | "select"
-    | "preserved_line"
-    | "group_header";
-  options?: { label: string; value: string }[];
-  originalLine?: string; // For section titles or descriptions
-  placeholderText?: string; // Hint for user
-  groupName?: string; // For radio buttons if placeholder.dataType === 'enum' && placeholder.uiHint === 'radio'
-  isChecked?: boolean; // For checkboxes, formData[id] will hold this. Temporarily re-added for old code.
-  isRadioOption?: boolean; // UI rendering hint
-  lineNumber?: number; // Order derived from definition.json and sections. Temporarily re-added for old code.
-  dataType: PlaceholderDefinition["dataType"];
-  required?: boolean;
-  description?: string;
-  sectionId?: string;
-  uiHint?: PlaceholderDefinition["uiHint"];
-  dependsOn?: PlaceholderDefinition["dependsOn"];
-  isSectionHeader?: boolean; // To render section titles
-}
+// Removed local type definitions as they are now imported
 // --- END: Type Definitions ---
 
-type ContractFormData = Record<string, string | number | boolean | undefined>;
+// type ContractFormData = Record<string, string | number | boolean | undefined>; // Also removed, part of imported types
 
 const NewContractPage: React.FC = () => {
   const [uiStep, setUiStep] = useState<
@@ -86,7 +19,7 @@ const NewContractPage: React.FC = () => {
   const [availableDefinitions, setAvailableDefinitions] = useState<
     { filename: string; name: string }[]
   >([]);
-  const [selectedDefinitionName, setSelectedDefinitionName] = useState<
+  const [selectedDefinitionFilename, setSelectedDefinitionFilename] = useState<
     string | null
   >(null);
   const [currentDefinition, setCurrentDefinition] =
@@ -108,7 +41,7 @@ const NewContractPage: React.FC = () => {
       try {
         const definitions = [
           {
-            filename: "rentalLease.definition.json",
+            filename: "rentalLeaseDefinition",
             name: "Rental Lease",
           },
           {
@@ -118,7 +51,7 @@ const NewContractPage: React.FC = () => {
         ];
         setAvailableDefinitions(definitions);
       } catch (error) {
-        console.error("Error fetching contract definitions:", error);
+        console.error("Error setting contract definitions:", error);
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -134,7 +67,7 @@ const NewContractPage: React.FC = () => {
 
   // Effect to load selected definition and its template
   useEffect(() => {
-    if (!selectedDefinitionName) {
+    if (!selectedDefinitionFilename) {
       setCurrentDefinition(null);
       setTemplateOriginalContent("");
       setFormFields([]);
@@ -146,26 +79,22 @@ const NewContractPage: React.FC = () => {
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        // Fetch the definition JSON
-        const definitionResponse = await fetch(
-          `/contracts/defined/${selectedDefinitionName}`
-        );
-        if (!definitionResponse.ok) {
-          throw new Error(
-            `Failed to fetch definition ${selectedDefinitionName}: ${definitionResponse.statusText}`
-          );
+        // Fetch the definition JSON using the filename
+        let definitionData: ContractDefinition;
+        if (selectedDefinitionFilename === "rentalLeaseDefinition") {
+          definitionData = rentalLeaseDefinition as ContractDefinition;
+        } else {
+          // TODO: replace with actual definition
+          definitionData = rentalLeaseDefinition as ContractDefinition;
+          // const definitionData = await import(
+          //   `../../contracts/defined/${selectedDefinitionFilename}`
+          // );
         }
-        const definitionData: ContractDefinition =
-          await definitionResponse.json();
         setCurrentDefinition(definitionData);
-
-        // Fetch the markdown template
         if (
           definitionData.templateMeta &&
           definitionData.templateMeta.templateFile
         ) {
-          // Assuming templateFile is a path relative to /public, e.g., "contracts/rentalLease.md" or just "rentalLease.md"
-          // Ensure the path starts correctly for fetch
           const templatePath =
             definitionData.templateMeta.templateFile.startsWith("/")
               ? definitionData.templateMeta.templateFile
@@ -180,11 +109,9 @@ const NewContractPage: React.FC = () => {
           const templateText = await templateResponse.text();
           setTemplateOriginalContent(templateText);
 
-          // Placeholder for new parsing logic
-          // parseContractDefinitionFromJson(definitionData, templateText);
-          // For now, clear old fields
-          setFormFields([]);
-          setFormData({});
+          // Call the new parser function
+          parseContractDefinition(definitionData);
+
           if (definitionData.templateMeta.title) {
             setContractName(
               definitionData.templateMeta.title.replace(/\s+/g, "_") + "_Filled"
@@ -193,7 +120,7 @@ const NewContractPage: React.FC = () => {
         } else {
           throw new Error("Template file path not specified in definition.");
         }
-        setUiStep("fillForm"); // Move to form filling step
+        setUiStep("fillForm");
       } catch (error) {
         console.error("Error loading definition or template:", error);
         setErrorMessage(
@@ -211,263 +138,133 @@ const NewContractPage: React.FC = () => {
     };
 
     loadDefinitionAndTemplate();
-  }, [selectedDefinitionName]);
+  }, [selectedDefinitionFilename]);
 
-  const parseMarkdownTemplate = (markdown: string) => {
-    // THIS FUNCTION WILL BE REPLACED by parseContractDefinitionFromJson
-    // For now, let's keep it to avoid breaking the rest of the file during partial updates
-    // but it should not be called if currentDefinition is set.
-    if (currentDefinition) return; // Prevent old parser from running
+  // NEW: Function to parse the contract definition JSON into form fields
+  const parseContractDefinition = (definition: ContractDefinition) => {
+    const newFormFields: FormField[] = [];
+    const newFormData: ContractFormData = {};
 
-    const lines = markdown.split("\n");
-    const parsedFields: FormField[] = [];
-    const initialFormData: ContractFormData = {};
-    let currentRadioGroupName: string | null = null;
-    let radioGroupIndex = 0;
-
-    lines.forEach((line, index) => {
-      const lineNumber = index;
-      const placeholderRegex = /(`?{{\s*([\w_]+)\s*}}`?)/g;
-      const checkboxRegex = /^\s*\*\s*\[(\s|x|X)?\]\s*(.*)/;
-      const radioHeaderRegex = /^(.*\S.*)\s*\(select one\):\s*$/i;
-      let fieldAddedForLine = false;
-
-      const radioHeaderMatch = line.match(radioHeaderRegex);
-      if (radioHeaderMatch && currentDefinition === null) {
-        // only run old logic if no new definition
-        currentRadioGroupName = `radio_group_${radioGroupIndex++}_${radioHeaderMatch[1]
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, "_")}`;
-        parsedFields.push({
-          id: currentRadioGroupName + "_header",
-          label: radioHeaderMatch[1].trim(),
-          type: "preserved_line",
-          originalLine: line,
-          groupName: currentRadioGroupName,
-          lineNumber,
-          dataType: "string",
+    // Optional: Process sections to create headers
+    if (definition.sections) {
+      definition.sections
+        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+        .forEach((section) => {
+          newFormFields.push({
+            id: `section_header_${section.sectionId}`,
+            label: section.title,
+            type: "group_header",
+            dataType: "string", // Dummy, not a real input
+            originalLine: section.description, // Can use this to display section description
+            isSectionHeader: true,
+          });
         });
-        initialFormData[currentRadioGroupName] = "";
-        fieldAddedForLine = true;
-      } else if (line.match(/^\s*\*\s*\[/) && currentDefinition === null) {
-        const itemMatch = line.match(checkboxRegex);
-        if (itemMatch) {
-          const isCheckedInitial = itemMatch[1]?.trim().toLowerCase() === "x";
-          const optionLabel = itemMatch[2].trim();
-          const optionVarPlaceholder = optionLabel.match(placeholderRegex);
-          const baseOptionLabel = optionLabel
-            .replace(placeholderRegex, "")
-            .trim();
-          const baseId = `item_${lineNumber}_${baseOptionLabel
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, "_")
-            .substring(0, 20)}`;
+    }
 
-          if (currentRadioGroupName && line.match(/^\s{2,}\*\s*\[/)) {
-            const radioOptionId = `${baseId}_radio_option`;
-            parsedFields.push({
-              id: radioOptionId,
-              label: baseOptionLabel,
-              type: "radio",
-              originalLine: line,
-              groupName: currentRadioGroupName,
-              placeholderText: optionLabel,
-              isRadioOption: true,
-              lineNumber,
-              dataType: "string",
-            });
-            if (optionVarPlaceholder) {
-              const varName = optionVarPlaceholder[0].replace(
-                /`?{{\s*|\s*}}`?/g,
-                ""
-              );
-              const varInputId = `var_${varName}_for_${radioOptionId}`;
-              parsedFields.push({
-                id: varInputId,
-                label: `${baseOptionLabel} - ${varName.replace(/_/g, " ")}`,
-                type: inferInputType(varName, line, optionVarPlaceholder[0]),
-                originalLine: optionVarPlaceholder[0],
-                placeholderText: optionVarPlaceholder[0],
-                lineNumber: lineNumber + 0.1,
-                dataType: "string",
-              });
-              initialFormData[varInputId] = "";
-            }
-          } else {
-            const checkboxId = `${baseId}_checkbox`;
-            parsedFields.push({
-              id: checkboxId,
-              label: baseOptionLabel,
-              type: "checkbox",
-              originalLine: line,
-              isChecked: isCheckedInitial,
-              placeholderText: optionLabel,
-              lineNumber,
-              dataType: "string",
-            });
-            initialFormData[checkboxId] = isCheckedInitial;
-            currentRadioGroupName = null;
-          }
-          fieldAddedForLine = true;
-        }
-      } else {
-        currentRadioGroupName = null;
+    definition.placeholders.forEach((p) => {
+      let fieldType: FormField["type"] = "text";
+      if (p.dataType === "boolean") {
+        fieldType = "checkbox";
+      } else if (p.dataType === "date") {
+        fieldType = "date";
+      } else if (p.dataType === "number" || p.dataType === "integer") {
+        fieldType = "number";
+      } else if (p.dataType === "text") {
+        fieldType = "textarea"; // Default longer text to textarea
+      } else if (p.dataType === "string") {
+        fieldType = "text";
       }
+      if (p.dataType === "enum") {
+        fieldType = p.uiHint === "radio" ? "radio" : "select";
+      }
+      if (p.uiHint === "textarea") fieldType = "textarea"; // Explicit uiHint overrides
 
-      if (!fieldAddedForLine) {
-        let lastIndex = 0;
-        let lineHasInputs = false;
-        let match;
-        while ((match = placeholderRegex.exec(line)) !== null) {
-          lineHasInputs = true;
-          if (match.index > lastIndex) {
-            // Potentially add text part before placeholder here if needed for layout
-          }
-          const fullPlaceholder = match[0];
-          const varName = match[1];
-          const inputId = `var_${varName}`;
-          const inputType = inferInputType(varName, line, fullPlaceholder);
-          parsedFields.push({
-            id: inputId,
-            label: extractLabel(line, fullPlaceholder, varName),
-            type: inputType,
-            originalLine: line,
-            placeholderText: fullPlaceholder,
-            lineNumber,
-            dataType: "string",
-          });
-          initialFormData[inputId] = "";
-          lastIndex = placeholderRegex.lastIndex;
-        }
-        if (!lineHasInputs) {
-          parsedFields.push({
-            id: `preserved_${lineNumber}`,
-            label: "",
-            type: "preserved_line",
-            originalLine: line,
-            lineNumber,
-            dataType: "string",
-          });
+      const formField: FormField = {
+        id: p.id,
+        label: p.label,
+        type: fieldType,
+        dataType: p.dataType,
+        options: p.options,
+        required: p.required,
+        description: p.description,
+        placeholderText: p.description || p.label, // Use description or label as placeholder
+        sectionId: p.sectionId,
+        uiHint: p.uiHint,
+        dependsOn: p.dependsOn,
+        // groupName will be needed if type is 'radio' for multiple options under one group
+      };
+
+      if (fieldType === "radio" && p.options) {
+        // For radio, we create one entry for each option, but they share a groupName (p.id)
+        // The main formField can represent the group, or we handle it in rendering
+        // For simplicity, renderFormField will iterate options if fieldType is radio.
+        newFormFields.push(formField); // Add the main field descriptor
+        newFormData[p.id] =
+          p.defaultValue ?? (p.options.length > 0 ? p.options[0].value : "");
+      } else {
+        newFormFields.push(formField);
+        if (p.dataType === "boolean") {
+          newFormData[p.id] =
+            p.defaultValue !== undefined ? Boolean(p.defaultValue) : false;
+        } else {
+          newFormData[p.id] =
+            p.defaultValue !== undefined ? p.defaultValue : "";
         }
       }
     });
-    parsedFields.sort((a, b) => (a.lineNumber || 0) - (b.lineNumber || 0));
-    setFormFields(parsedFields);
-    setFormData(initialFormData);
-  };
 
-  const inferInputType = (
-    varName: string,
-    line: string,
-    placeholder: string
-  ): FormField["type"] => {
-    // THIS FUNCTION WILL BE REPLACED
-    if (currentDefinition) return "text"; // Default for new logic until fully replaced
-    const lowerVar = varName.toLowerCase();
-    if (lowerVar.includes("date")) return "date";
-    if (
-      lowerVar.includes("amount") ||
-      lowerVar.includes("rent") ||
-      lowerVar.includes("fee") ||
-      lowerVar.includes("deposit") ||
-      lowerVar.includes("percent")
-    )
-      return "number";
-    if (line.trim() === placeholder) return "textarea";
-    return "text";
-  };
+    // Simple sort: section headers first, then by placeholder order in definition (implicitly)
+    // A more robust sort might use sectionId and placeholder order within sections.
+    newFormFields.sort((a, b) => {
+      if (a.isSectionHeader && !b.isSectionHeader) return -1;
+      if (!a.isSectionHeader && b.isSectionHeader) return 1;
+      return 0; // Keep placeholder order as is for now, or implement more complex sort
+    });
 
-  const extractLabel = (
-    line: string,
-    placeholder: string,
-    varName: string
-  ): string => {
-    // THIS FUNCTION WILL BE REPLACED
-    if (currentDefinition) return varName.replace(/_/g, " "); // Default for new logic
-    const parts = line.split(placeholder);
-    const precedingText = parts[0].trim();
-    if (
-      precedingText &&
-      !precedingText.endsWith(":") &&
-      !precedingText.endsWith("-") &&
-      precedingText.length > 3
-    ) {
-      const labelCandidate = precedingText.split(/[:*-]/).pop()?.trim();
-      if (labelCandidate) return labelCandidate;
-    }
-    return varName.replace(/_/g, " ");
+    setFormFields(newFormFields);
+    setFormData(newFormData);
   };
 
   const handleChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value, type } = e.target;
     if (type === "checkbox") {
       const { checked } = e.target as HTMLInputElement;
       setFormData((prev) => ({ ...prev, [name]: checked }));
     } else if (type === "radio") {
-      const radioGroupName = (e.target as HTMLInputElement).name;
-      setFormData((prev) => ({ ...prev, [radioGroupName]: value }));
+      // For radio, name is the group id (placeholder.id), value is the selected option's value
+      setFormData((prev) => ({ ...prev, [name]: value }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
   };
 
   const generateContractText = (): string => {
-    const outputLines = templateOriginalContent.split("\n");
-    formFields.forEach((field) => {
-      if (field.type === "preserved_line") return;
-      let lineToUpdate = outputLines[field.lineNumber || 0];
-      if (lineToUpdate === undefined) return;
+    if (!currentDefinition || !templateOriginalContent) return "";
+    let populatedText = templateOriginalContent;
 
-      if (field.type === "checkbox") {
-        const isChecked = formData[field.id] as boolean;
-        const newCheckboxState = isChecked ? "[x]" : "[ ]";
-        const originalCheckboxMarker = field.originalLine?.match(
-          /^(\s*\*\s*\[(\s|x|X)?\])/
-        )?.[0];
-        if (originalCheckboxMarker) {
-          lineToUpdate = lineToUpdate.replace(
-            originalCheckboxMarker,
-            originalCheckboxMarker.replace(
-              /\s*\[(\s|x|X)?\]\s*/,
-              ` ${newCheckboxState} `
-            )
-          );
-        }
-      } else if (field.isRadioOption && field.groupName) {
-        const radioGroupValue = formData[field.groupName] as string;
-        const isSelected = field.id === radioGroupValue;
-        const newRadioState = isSelected ? "[x]" : "[ ]";
-        const originalRadioMarker = field.originalLine?.match(
-          /^(\s*\*\s*\[(\s|x|X)?\])/
-        )?.[0];
-        if (originalRadioMarker) {
-          lineToUpdate = lineToUpdate.replace(
-            originalRadioMarker,
-            originalRadioMarker.replace(
-              /\s*\[(\s|x|X)?\]\s*/,
-              ` ${newRadioState} `
-            )
-          );
-        }
-      } else if (field.placeholderText) {
-        const valueToInsert = String(
-          formData[field.id] === undefined ? "" : formData[field.id]
+    currentDefinition.placeholders.forEach((placeholder) => {
+      // Using a regex that matches {{ID}}, {{ ID }}, {{ID }}, etc.
+      const regex = new RegExp(
+        `{{\s*${placeholder.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*}}`,
+        "g"
+      );
+      const value = formData[placeholder.id];
+
+      if (value !== undefined) {
+        populatedText = populatedText.replace(regex, String(value));
+      } else if (placeholder.defaultValue !== undefined) {
+        populatedText = populatedText.replace(
+          regex,
+          String(placeholder.defaultValue)
         );
-        const placeholderEscaped = field.placeholderText.replace(
-          /[.*+\-?^{}()|[\]\\]/g,
-          "\\$&"
-        );
-        lineToUpdate = lineToUpdate.replace(
-          new RegExp(placeholderEscaped, "g"),
-          valueToInsert
-        );
+      } else {
+        // Optional: replace with empty string or a notice like "[NOT_FILLED]"
+        // populatedText = populatedText.replace(regex, "");
       }
-      outputLines[field.lineNumber || 0] = lineToUpdate;
     });
-    return outputLines.join("\n");
+    return populatedText;
   };
 
   const handleSaveContract = async () => {
@@ -480,8 +277,6 @@ const NewContractPage: React.FC = () => {
     setErrorMessage(null);
 
     const populatedContract = generateContractText();
-    console.log("Generated Contract (to be saved):\n", populatedContract);
-
     const filename = `${
       contractName.replace(/[^a-z0-9_\-]/gi, "_") || "contract"
     }.md`;
@@ -510,74 +305,17 @@ const NewContractPage: React.FC = () => {
       );
     } finally {
       setIsLoading(false);
-      setUiStep("fillForm");
+      setUiStep("selectContract");
+      setSelectedDefinitionFilename(null);
+      setCurrentDefinition(null);
+      setContractName("MyContract");
+      setFormFields([]);
+      setFormData({});
     }
   };
 
   const inputBaseClasses =
     "w-full py-2.5 px-3 border border-gray-300 rounded text-base text-gray-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none";
-
-  const renderFormField = (field: FormField) => {
-    if (!currentDefinition) {
-      const commonProps = {
-        name: field.id,
-        id: field.id,
-        onChange: handleChange,
-        key: field.id,
-      };
-      if (
-        field.type === "text" ||
-        field.type === "date" ||
-        field.type === "number"
-      ) {
-        return (
-          <div key={field.id} className="mb-5">
-            <label
-              htmlFor={field.id}
-              className="block mb-2 font-semibold text-gray-700 text-sm"
-            >
-              {field.label}:
-            </label>
-            <input
-              type={field.type}
-              {...commonProps}
-              value={(formData[field.id] as string) || ""}
-              className={inputBaseClasses}
-            />
-          </div>
-        );
-      } else if (field.type === "textarea") {
-        return (
-          <div key={field.id} className="mb-5">
-            <label
-              htmlFor={field.id}
-              className="block mb-2 font-semibold text-gray-700 text-sm"
-            >
-              {field.label}:
-            </label>
-            <textarea
-              {...commonProps}
-              value={(formData[field.id] as string) || ""}
-              rows={3}
-              className={`${inputBaseClasses} min-h-[80px] resize-y`}
-            ></textarea>
-          </div>
-        );
-      }
-      return (
-        <div key={field.id} className="my-1 text-sm text-gray-500">
-          {" "}
-          (Old field: {field.label || field.originalLine})
-        </div>
-      );
-    }
-    return (
-      <div key={field.id} className="my-1 text-sm text-blue-500">
-        Field: {field.label} (ID: {field.id}) - Type: {field.dataType} (UI:{" "}
-        {field.type})
-      </div>
-    );
-  };
 
   if (
     isLoading &&
@@ -585,41 +323,23 @@ const NewContractPage: React.FC = () => {
     availableDefinitions.length === 0
   ) {
     return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <p className="text-gray-600 text-lg">Loading available contracts...</p>
-        {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
-      </div>
+      <ContractSelectionStep
+        availableDefinitions={availableDefinitions}
+        onSelectDefinition={setSelectedDefinitionFilename}
+        isLoading={isLoading}
+        errorMessage={errorMessage}
+      />
     );
   }
 
   if (uiStep === "selectContract") {
     return (
-      <div className="flex flex-col items-center w-full p-4">
-        <h1 className="text-4xl font-bold text-gray-800 mb-6">
-          Select a Contract Template
-        </h1>
-        {errorMessage && <p className="text-red-500 mb-4">{errorMessage}</p>}
-        {availableDefinitions.length === 0 && !isLoading && (
-          <p className="text-gray-600">
-            No contract definitions found in{" "}
-            <code>/public/contracts/defined/</code>.
-          </p>
-        )}
-        {availableDefinitions.length > 0 && (
-          <ul className="w-full max-w-md bg-white p-6 rounded-lg shadow-lg">
-            {availableDefinitions.map((def) => (
-              <li key={def.filename} className="mb-3">
-                <button
-                  onClick={() => setSelectedDefinitionName(def.name)}
-                  className="w-full text-left py-3 px-4 bg-gray-100 hover:bg-blue-500 hover:text-white rounded-md transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                  {def.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <ContractSelectionStep
+        availableDefinitions={availableDefinitions}
+        onSelectDefinition={setSelectedDefinitionFilename}
+        isLoading={isLoading}
+        errorMessage={errorMessage}
+      />
     );
   }
 
@@ -627,7 +347,7 @@ const NewContractPage: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center flex-grow">
         <p className="text-gray-600 text-lg">
-          Loading contract details for {selectedDefinitionName}...
+          Loading contract details for {selectedDefinitionFilename}...
         </p>
         {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
       </div>
@@ -642,7 +362,11 @@ const NewContractPage: React.FC = () => {
           again.
         </p>
         <button
-          onClick={() => setUiStep("selectContract")}
+          onClick={() => {
+            setUiStep("selectContract");
+            setSelectedDefinitionFilename(null);
+            setErrorMessage(null);
+          }}
           className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
         >
           Back to Selection
@@ -679,7 +403,7 @@ const NewContractPage: React.FC = () => {
               </span>
             </p>
             <p className="text-sm text-gray-500 mb-8">
-              Definition: {selectedDefinitionName}
+              Definition: {selectedDefinitionFilename}
             </p>
           </>
         ) : (
@@ -693,63 +417,19 @@ const NewContractPage: React.FC = () => {
 
         <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
           {uiStep === "fillForm" && currentDefinition && (
-            <>
-              <div className="mb-6">
-                <label
-                  htmlFor="contractName"
-                  className="block mb-2 font-semibold text-gray-700 text-sm"
-                >
-                  Contract Name (for generated file):
-                </label>
-                <input
-                  type="text"
-                  id="contractName"
-                  value={contractName}
-                  onChange={(e) => setContractName(e.target.value)}
-                  placeholder="e.g., MyRentalAgreement_Jan2024"
-                  className={inputBaseClasses}
-                />
-              </div>
-
-              <h2 className="text-2xl font-semibold mb-6 mt-8 text-gray-800 border-b pb-3">
-                Fill Contract Details
-              </h2>
-              {formFields.length > 0 ? (
-                formFields.map((field) => renderFormField(field))
-              ) : (
-                <p className="text-gray-500">
-                  Form fields will appear here once the definition is processed.
-                </p>
-              )}
-
-              {templateOriginalContent &&
-                formFields.length === 0 &&
-                !isLoading &&
-                !errorMessage && (
-                  <p className="text-gray-600 mt-4">
-                    Definition loaded. Preparing form...
-                  </p>
-                )}
-
-              {!isLoading &&
-                formFields.length === 0 &&
-                currentDefinition &&
-                !errorMessage && (
-                  <p className="text-orange-500 mt-4">
-                    No form fields generated yet. This indicates the parsing
-                    logic (next step) is pending or the definition's
-                    placeholders array is empty.
-                  </p>
-                )}
-
-              <button
-                onClick={handleSaveContract}
-                className="bg-blue-600 text-white py-3 px-5 rounded-md cursor-pointer text-lg transition-colors duration-200 ease-in-out w-full mt-6 hover:bg-blue-700 disabled:opacity-50"
-                disabled={isLoading || !currentDefinition}
-              >
-                {isLoading ? "Generating..." : "Generate & Save Contract"}
-              </button>
-            </>
+            <ContractFormStep
+              currentDefinition={currentDefinition}
+              formFields={formFields}
+              formData={formData}
+              contractName={contractName}
+              inputBaseClasses={inputBaseClasses}
+              isLoading={isLoading}
+              errorMessage={errorMessage}
+              onContractNameChange={setContractName}
+              onFormFieldChange={handleChange}
+              onSubmit={handleSaveContract}
+              selectedDefinitionFilename={selectedDefinitionFilename}
+            />
           )}
         </div>
       </div>
