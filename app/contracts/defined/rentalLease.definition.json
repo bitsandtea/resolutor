@@ -1,0 +1,587 @@
+{
+  "templateMeta": {
+    "templateId": "rentalLease-v1.0",
+    "title": "Residential Lease Agreement",
+    "description": "Standard residential lease agreement template definition.",
+    "templateFile": "contracts/rentalLease.md"
+  },
+  "parties": [
+    {
+      "roleId": "owner",
+      "roleLabel": "Owner (Landlord/Lessor/Agent)",
+      "maxCount": 1,
+      "associatedPlaceholders": ["OWNER_NAME", "OWNER_ADDRESS_FOR_NOTICES"]
+    },
+    {
+      "roleId": "resident",
+      "roleLabel": "Resident (Tenant/Lessee)",
+      "minCount": 1,
+      "maxCount": 5,
+      "associatedPlaceholders": ["RESIDENT_NAME", "APPROVED_OCCUPANTS"]
+    }
+  ],
+  "sections": [
+    {
+      "sectionId": "basicInfo",
+      "title": "Basic Information",
+      "displayOrder": 1
+    },
+    {
+      "sectionId": "leaseTerms",
+      "title": "1. Lease Terms",
+      "displayOrder": 2
+    },
+    {
+      "sectionId": "payments",
+      "title": "2. Payments",
+      "displayOrder": 3
+    },
+    {
+      "sectionId": "securityDeposit",
+      "title": "3. Security Deposit",
+      "displayOrder": 4
+    },
+    {
+      "sectionId": "lateCharges",
+      "title": "4. Late Charges",
+      "displayOrder": 5
+    },
+    {
+      "sectionId": "utilities",
+      "title": "5. Utilities",
+      "displayOrder": 6
+    },
+    {
+      "sectionId": "occupants",
+      "title": "6. Occupants",
+      "displayOrder": 7
+    },
+    {
+      "sectionId": "pets",
+      "title": "7. Pets",
+      "displayOrder": 8
+    },
+    {
+      "sectionId": "furnishings",
+      "title": "8. Liquid-Filled Furnishings",
+      "displayOrder": 9
+    },
+    {
+      "sectionId": "parking",
+      "title": "9. Parking",
+      "displayOrder": 10
+    },
+    {
+      "sectionId": "premiseCondition",
+      "title": "11-12. Premise Condition & Destruction",
+      "displayOrder": 11
+    },
+    {
+      "sectionId": "maintenanceRules",
+      "title": "13-15. Alterations, Maintenance & House Rules",
+      "displayOrder": 12
+    },
+    {
+      "sectionId": "leaseModificationTermination",
+      "title": "16-18. Change of Terms, Termination, Possession",
+      "displayOrder": 13
+    },
+    {
+      "sectionId": "insuranceEntryAssignment",
+      "title": "19-21. Insurance, Right of Entry, Assignment",
+      "displayOrder": 14
+    },
+    {
+      "sectionId": "legalBoilerplate",
+      "title": "22-26. Legal Clauses",
+      "displayOrder": 15
+    },
+    {
+      "sectionId": "leadDisclosure",
+      "title": "27. Lead Disclosure",
+      "displayOrder": 16
+    },
+    {
+      "sectionId": "additionsExceptions",
+      "title": "28. Additions and/or Exceptions",
+      "displayOrder": 17
+    },
+    {
+      "sectionId": "notices",
+      "title": "29. Notices",
+      "displayOrder": 18
+    },
+    {
+      "sectionId": "inventory",
+      "title": "30. Inventory",
+      "displayOrder": 19
+    },
+    {
+      "sectionId": "receivedItems",
+      "title": "31. Keys & Addendums",
+      "displayOrder": 20
+    }
+  ],
+  "placeholders": [
+    {
+      "id": "OWNER_NAME",
+      "label": "Owner's Full Name (Landlord/Lessor/Agent)",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "basicInfo",
+      "description": "Full legal name of the property owner or their authorized agent."
+    },
+    {
+      "id": "RESIDENT_NAME",
+      "label": "Resident's Full Name(s) (Tenant/Lessee)",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "basicInfo",
+      "description": "Full legal name(s) of all tenants. If multiple, separate with commas."
+    },
+    {
+      "id": "RENTAL_ADDRESS",
+      "label": "Premises Street Address",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "basicInfo",
+      "description": "The full street address of the rental property, including unit number if applicable."
+    },
+    {
+      "id": "CITY",
+      "label": "Premises City",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "basicInfo",
+      "description": "The city where the rental property is located."
+    },
+    {
+      "id": "RENT_AMOUNT",
+      "label": "Monthly Rent Amount",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "leaseTerms",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency"
+    },
+    {
+      "id": "RENT_DUE_DAY",
+      "label": "Rent Due Day of Month",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "leaseTerms",
+      "description": "E.g., \"1st\", \"first\", \"5th\""
+    },
+    {
+      "id": "LEASE_START_DATE",
+      "label": "Lease Start Date",
+      "dataType": "date",
+      "required": true,
+      "sectionId": "leaseTerms"
+    },
+    {
+      "id": "LEASE_TYPE",
+      "label": "Lease Type",
+      "dataType": "enum",
+      "required": true,
+      "sectionId": "leaseTerms",
+      "options": [
+        { "value": "fixed", "label": "Fixed Term Lease" },
+        { "value": "month_to_month", "label": "Month-to-Month Tenancy" }
+      ],
+      "uiHint": "radio"
+    },
+    {
+      "id": "LEASE_END_DATE",
+      "label": "Lease End Date (if Fixed Term)",
+      "dataType": "date",
+      "required": false,
+      "sectionId": "leaseTerms",
+      "dependsOn": {
+        "placeholderId": "LEASE_TYPE",
+        "value": "fixed"
+      },
+      "description": "Required only if 'Lease Type' is 'Fixed Term Lease'."
+    },
+    {
+      "id": "CONVERTS_TO_MONTH_TO_MONTH",
+      "label": "Converts to Month-to-Month after Fixed Term",
+      "dataType": "boolean",
+      "required": false,
+      "sectionId": "leaseTerms",
+      "defaultValue": true,
+      "dependsOn": {
+        "placeholderId": "LEASE_TYPE",
+        "value": "fixed"
+      },
+      "uiHint": "checkbox"
+    },
+    {
+      "id": "PAYABLE_TO",
+      "label": "Rent Payable To",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "payments",
+      "description": "Name of the person or entity to whom rent should be paid."
+    },
+    {
+      "id": "PAYMENT_METHOD",
+      "label": "Accepted Payment Method(s)",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "payments",
+      "description": "E.g., Check, Online Portal, Bank Transfer."
+    },
+    {
+      "id": "FIRST_MONTH_RENT",
+      "label": "First Month's Rent",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "payments",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency"
+    },
+    {
+      "id": "SECURITY_DEPOSIT",
+      "label": "Security Deposit Amount",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "payments",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency"
+    },
+    {
+      "id": "HAS_ADDITIONAL_FEES",
+      "label": "Are there additional fees due at signing?",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "payments",
+      "defaultValue": false,
+      "uiHint": "checkbox"
+    },
+    {
+      "id": "ADDITIONAL_FEES",
+      "label": "Additional Fees Amount",
+      "dataType": "number",
+      "required": false,
+      "sectionId": "payments",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency",
+      "dependsOn": {
+        "placeholderId": "HAS_ADDITIONAL_FEES",
+        "value": true
+      }
+    },
+    {
+      "id": "ADDITIONAL_FEES_DESCRIPTION",
+      "label": "Description of Additional Fees",
+      "dataType": "string",
+      "required": false,
+      "sectionId": "payments",
+      "dependsOn": {
+        "placeholderId": "HAS_ADDITIONAL_FEES",
+        "value": true
+      }
+    },
+    {
+      "id": "TOTAL_PAYMENT",
+      "label": "Total Due at Signing",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "payments",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency",
+      "description": "Typically First Month's Rent + Security Deposit + Additional Fees. Can be auto-calculated or manually entered."
+    },
+    {
+      "id": "DEPOSIT_REFUND_DAYS",
+      "label": "Security Deposit Refundable Within (Days)",
+      "dataType": "integer",
+      "required": true,
+      "sectionId": "securityDeposit",
+      "validationRules": { "min": 1 }
+    },
+    {
+      "id": "LATE_FEE",
+      "label": "Late Fee Amount",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "lateCharges",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency"
+    },
+    {
+      "id": "LATE_FEE_PERCENTAGE",
+      "label": "Late Fee Percentage Cap (of rent)",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "lateCharges",
+      "validationRules": { "min": 0, "max": 100 },
+      "description": "Enter as a number, e.g., 5 for 5%."
+    },
+    {
+      "id": "LATE_AFTER_DAY",
+      "label": "Rent Considered Late After",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "lateCharges",
+      "description": "E.g., \"3rd day of the month\", \"5 days after due date\"."
+    },
+    {
+      "id": "NSF_FEE",
+      "label": "Returned Check (NSF) Fee",
+      "dataType": "number",
+      "required": true,
+      "sectionId": "lateCharges",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency"
+    },
+    {
+      "id": "UTILITIES_EXCEPTIONS",
+      "label": "Utilities Paid by Owner (if any)",
+      "dataType": "text",
+      "required": false,
+      "sectionId": "utilities",
+      "description": "List utilities Owner is responsible for. If blank, Resident pays all."
+    },
+    {
+      "id": "APPROVED_OCCUPANTS",
+      "label": "Approved Occupants (besides listed Residents)",
+      "dataType": "text",
+      "required": false,
+      "sectionId": "occupants",
+      "description": "Names of other individuals approved to reside long-term. Template default is 15+ days."
+    },
+    {
+      "id": "PETS_ALLOWED_WRITTEN_AUTH",
+      "label": "Are pets allowed (with written authorization)?",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "pets",
+      "uiHint": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "id": "PET_DEPOSIT",
+      "label": "Pet Deposit Amount",
+      "dataType": "number",
+      "required": false,
+      "sectionId": "pets",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency",
+      "dependsOn": {
+        "placeholderId": "PETS_ALLOWED_WRITTEN_AUTH",
+        "value": true
+      }
+    },
+    {
+      "id": "PET_RENT",
+      "label": "Additional Monthly Pet Rent",
+      "dataType": "number",
+      "required": false,
+      "sectionId": "pets",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency",
+      "dependsOn": {
+        "placeholderId": "PETS_ALLOWED_WRITTEN_AUTH",
+        "value": true
+      }
+    },
+    {
+      "id": "PET_INSURANCE_REQUIRED",
+      "label": "Is pet insurance required?",
+      "dataType": "boolean",
+      "required": false,
+      "sectionId": "pets",
+      "uiHint": "checkbox",
+      "defaultValue": false,
+      "dependsOn": {
+        "placeholderId": "PETS_ALLOWED_WRITTEN_AUTH",
+        "value": true
+      },
+      "description": "Per OWNER's discretion as per template."
+    },
+    {
+      "id": "PARKING_ASSIGNED",
+      "label": "Is parking assigned?",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "parking",
+      "uiHint": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "id": "PARKING_SPACE",
+      "label": "Assigned Parking Space(s)",
+      "dataType": "string",
+      "required": false,
+      "sectionId": "parking",
+      "dependsOn": {
+        "placeholderId": "PARKING_ASSIGNED",
+        "value": true
+      }
+    },
+    {
+      "id": "PARKING_FEE",
+      "label": "Monthly Parking Fee",
+      "dataType": "number",
+      "required": false,
+      "sectionId": "parking",
+      "validationRules": { "min": 0 },
+      "uiHint": "currency",
+      "dependsOn": {
+        "placeholderId": "PARKING_ASSIGNED",
+        "value": true
+      }
+    },
+    {
+      "id": "LEAD_DISCLOSURE_APPLIES",
+      "label": "Does Lead Disclosure apply (home built before 1978)?",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "leadDisclosure",
+      "uiHint": "checkbox"
+    },
+    {
+      "id": "LEAD_DISCLOSURE_FORM_RECEIVED",
+      "label": "Lead-Based Paint Disclosure Form Received by Resident",
+      "dataType": "boolean",
+      "required": false,
+      "sectionId": "leadDisclosure",
+      "uiHint": "checkbox",
+      "dependsOn": {
+        "placeholderId": "LEAD_DISCLOSURE_APPLIES",
+        "value": true
+      }
+    },
+    {
+      "id": "LEAD_EPA_PAMPHLET_RECEIVED",
+      "label": "EPA Pamphlet on Lead Hazards Received by Resident",
+      "dataType": "boolean",
+      "required": false,
+      "sectionId": "leadDisclosure",
+      "uiHint": "checkbox",
+      "dependsOn": {
+        "placeholderId": "LEAD_DISCLOSURE_APPLIES",
+        "value": true
+      }
+    },
+    {
+      "id": "ADDITIONS_EXCEPTIONS",
+      "label": "Additions and/or Exceptions to Lease",
+      "dataType": "text",
+      "required": false,
+      "sectionId": "additionsExceptions"
+    },
+    {
+      "id": "OWNER_ADDRESS_FOR_NOTICES",
+      "label": "Owner's Address for Notices",
+      "dataType": "string",
+      "required": true,
+      "sectionId": "notices",
+      "description": "Full address where notices to the Owner should be sent."
+    },
+    {
+      "id": "INVENTORY_ITEMS",
+      "label": "Inventory of Items Included with Premises",
+      "dataType": "text",
+      "required": false,
+      "sectionId": "inventory",
+      "description": "E.g., Refrigerator (model X), Stove, Dishwasher. List each item."
+    },
+    {
+      "id": "KEYS_RECEIVED_BY_RESIDENT",
+      "label": "Keys Received by Resident",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "receivedItems",
+      "uiHint": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "id": "KEY_DETAILS",
+      "label": "Details of Keys Received",
+      "dataType": "string",
+      "required": false,
+      "sectionId": "receivedItems",
+      "description": "E.g., \"2x front door, 1x mailbox\"",
+      "dependsOn": {
+        "placeholderId": "KEYS_RECEIVED_BY_RESIDENT",
+        "value": true
+      }
+    },
+    {
+      "id": "HOUSE_RULES_ADDENDUM_RECEIVED",
+      "label": "House Rules Addendum Received by Resident",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "receivedItems",
+      "uiHint": "checkbox",
+      "description": "Section 15 states resident must follow separate house rules addendum."
+    },
+    {
+      "id": "PET_AGREEMENT_ADDENDUM_RECEIVED",
+      "label": "Pet Agreement Addendum Received by Resident",
+      "dataType": "boolean",
+      "required": false,
+      "sectionId": "receivedItems",
+      "uiHint": "checkbox",
+      "dependsOn": {
+        "placeholderId": "PETS_ALLOWED_WRITTEN_AUTH",
+        "value": true
+      }
+    },
+    {
+      "id": "OTHER_ADDENDUMS",
+      "label": "Other Addendums Received by Resident (Description)",
+      "dataType": "text",
+      "required": false,
+      "sectionId": "receivedItems"
+    },
+    {
+      "id": "RESIDENT1_DATE",
+      "label": "Resident 1 Signature Date",
+      "dataType": "date",
+      "required": true,
+      "sectionId": "basicInfo"
+    },
+    {
+      "id": "RESIDENT2_DATE",
+      "label": "Resident 2 Signature Date (if applicable)",
+      "dataType": "date",
+      "required": false,
+      "sectionId": "basicInfo"
+    },
+    {
+      "id": "OWNER_DATE",
+      "label": "Owner/Agent Signature Date",
+      "dataType": "date",
+      "required": true,
+      "sectionId": "basicInfo"
+    }
+  ],
+  "signatureBlocks": [
+    {
+      "signatureBlockId": "resident1Signature",
+      "signerRoleId": "resident",
+      "label": "RESIDENT Signature:",
+      "datePlaceholderId": "RESIDENT1_DATE",
+      "required": true
+    },
+    {
+      "signatureBlockId": "resident2Signature",
+      "signerRoleId": "resident",
+      "label": "RESIDENT Signature (Additional):",
+      "datePlaceholderId": "RESIDENT2_DATE",
+      "required": false,
+      "description": "Use if there is a second resident signing."
+    },
+    {
+      "signatureBlockId": "ownerSignature",
+      "signerRoleId": "owner",
+      "label": "OWNER/Agent Signature:",
+      "datePlaceholderId": "OWNER_DATE",
+      "required": true
+    }
+  ]
+}
