@@ -18,6 +18,8 @@ model Agreement {
   partyB        String? // Party B's wallet address
   depositA      Float @default(0) // Party A deposit amount
   depositB      Float @default(0) // Party B deposit amount
+  depositAPaid  Boolean @default(false) // Whether Party A has paid their deposit
+  depositBPaid  Boolean @default(false) // Whether Party B has paid their deposit
   status        String @default("pending") // pending, active, disputed, resolved
   createdAt     DateTime @default(now())
 

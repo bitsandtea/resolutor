@@ -70,6 +70,8 @@ export async function GET(
           status: agreement.status,
           depositA: agreement.depositA,
           depositB: agreement.depositB,
+          depositAPaid: agreement.depositAPaid,
+          depositBPaid: agreement.depositBPaid,
           createdAt: agreement.createdAt,
           // Add any other details from the 'agreement' object you want to send to the frontend
         },

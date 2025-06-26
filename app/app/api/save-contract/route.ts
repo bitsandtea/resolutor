@@ -25,9 +25,9 @@ async function pinToIPFS(content: string, filename: string): Promise<string> {
   // In a real scenario, this function would interact with an IPFS pinning service
   // or a local IPFS node to upload the content and get a CID.
   console.log(`Simulating IPFS pinning for ${filename}...`);
-  // For now, let's generate a mock CID based on content hash for some determinism
-  const hash = crypto.createHash("sha256").update(content).digest("hex");
-  return `simulated-ipfs-cid-${hash.substring(0, 16)}`;
+  // Generate a random UUID for the CID to avoid collisions
+  const uuid = crypto.randomUUID();
+  return `simulated-ipfs-cid-${uuid}`;
 }
 
 export async function POST(req: NextRequest) {

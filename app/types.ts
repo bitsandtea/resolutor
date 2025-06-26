@@ -91,8 +91,22 @@ export interface ContractSigner {
   role: "creator" | "signer";
   status: "pending" | "invited" | "signed";
   depositAmount?: number; // Optional deposit amount for this signer
+  depositPaid?: boolean; // Whether this signer has paid their deposit
 }
 
 export interface SignerFormData {
   signers: ContractSigner[];
+}
+
+export interface DepositPaymentStatus {
+  partyA: {
+    required: boolean;
+    amount: number;
+    paid: boolean;
+  };
+  partyB: {
+    required: boolean;
+    amount: number;
+    paid: boolean;
+  };
 }

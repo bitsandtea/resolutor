@@ -42,15 +42,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update the agreement with party B information
+    // Determine if this is Party A or Party B signing
+    const isPartyA = agreement.partyA === signerEmail;
+    const isPartyB = !agreement.partyB || agreement.partyB === signerEmail;
+
+    // Update the agreement with signer information
+    let updateData: any = {};
+
+    if (isPartyB && !agreement.partyB) {
+      updateData.partyB = signerEmail;
+    }
+
+    // Check if all required deposits have been paid before marking as active
+    const partyADepositRequired = agreement.depositA > 0;
+    const partyBDepositRequired = agreement.depositB > 0;
+    const partyADepositComplete =
+      !partyADepositRequired || agreement.depositAPaid;
+    const partyBDepositComplete =
+      !partyBDepositRequired || agreement.depositBPaid;
+
+    // Only mark as active if all required deposits are paid and both parties have signed
+    if (
+      partyADepositComplete &&
+      partyBDepositComplete &&
+      (agreement.partyB || updateData.partyB)
+    ) {
+      updateData.status = "active";
+    }
+
     const updatedAgreement = await prisma.agreement.update({
       where: { id: agreementId },
-      data: {
-        partyB: signerEmail,
-        // Note: depositB amount is already set when contract was created
-        // In the future, we could allow modification here if needed
-        status: "active", // Assuming this means both parties have agreed to the terms
-      },
+      data: updateData,
     });
 
     return NextResponse.json(

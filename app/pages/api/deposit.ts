@@ -7,8 +7,9 @@ import { prisma } from "../../lib/prisma";
 
 interface DepositRequest {
   agreementId: string;
-  partyAddr: string;
-  amount: string;
+  party: "A" | "B"; // Specify which party is making the deposit
+  partyAddr?: string; // Optional party address
+  amount?: string; // Optional amount override
 }
 
 interface DepositResponse {
@@ -28,7 +29,7 @@ export default async function handler(
   }
 
   try {
-    const { agreementId, partyAddr, amount }: DepositRequest = req.body;
+    const { agreementId, party, partyAddr, amount }: DepositRequest = req.body;
 
     // Get agreement
     const agreement = await prisma.agreement.findUnique({
@@ -39,35 +40,60 @@ export default async function handler(
       return res.status(404).json({ error: "Agreement not found" });
     }
 
+    // Determine the deposit amount to use
+    let depositAmount: string;
+    if (amount) {
+      depositAmount = amount;
+    } else if (party === "A") {
+      depositAmount = agreement.depositA.toString();
+    } else {
+      depositAmount = agreement.depositB.toString();
+    }
+
+    // Check if deposit amount is greater than 0
+    if (parseFloat(depositAmount) <= 0) {
+      return res
+        .status(400)
+        .json({ error: "No deposit required for this party" });
+    }
+
     // Generate ERC20 transfer transaction to escrow contract
     const tx = generateDepositTransaction(
       MOCK_ERC20_ADDRESS,
       ESCROW_CONTRACT_ADDRESS,
-      amount
+      depositAmount
     );
 
-    // Update deposit status in database
-    const isPartyA = agreement.partyA === partyAddr;
-    const isPartyB = agreement.partyB === partyAddr;
-
-    if (isPartyA) {
+    // Update deposit payment status in database
+    if (party === "A") {
       await prisma.agreement.update({
         where: { id: agreementId },
-        data: { depositA: true },
+        data: { depositAPaid: true },
       });
-    } else if (isPartyB) {
+    } else if (party === "B") {
       await prisma.agreement.update({
         where: { id: agreementId },
-        data: { depositB: true },
+        data: { depositBPaid: true },
       });
     }
 
-    // Check if both parties have deposited
+    // Check if both parties have deposited (if required)
     const updatedAgreement = await prisma.agreement.findUnique({
       where: { id: agreementId },
     });
 
-    if (updatedAgreement?.depositA && updatedAgreement?.depositB) {
+    const partyADepositRequired = updatedAgreement!.depositA > 0;
+    const partyBDepositRequired = updatedAgreement!.depositB > 0;
+    const partyADepositComplete =
+      !partyADepositRequired || updatedAgreement!.depositAPaid;
+    const partyBDepositComplete =
+      !partyBDepositRequired || updatedAgreement!.depositBPaid;
+
+    if (
+      partyADepositComplete &&
+      partyBDepositComplete &&
+      updatedAgreement!.status === "pending"
+    ) {
       await prisma.agreement.update({
         where: { id: agreementId },
         data: { status: "active" },

@@ -108,6 +108,8 @@ interface Agreement {
   createdAt: string;
   depositA: number;
   depositB: number;
+  depositAPaid: boolean;
+  depositBPaid: boolean;
 }
 
 interface SigningData {
@@ -115,6 +117,8 @@ interface SigningData {
   signerEmail: string;
   agreeToTerms: boolean;
 }
+
+type SigningStep = "review" | "signing" | "deposit" | "postSignDeposit";
 
 const SignContractPage: React.FC = () => {
   const params = useParams();
@@ -125,7 +129,7 @@ const SignContractPage: React.FC = () => {
   const [contractContent, setContractContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSigningStep, setIsSigningStep] = useState<boolean>(false);
+  const [currentStep, setCurrentStep] = useState<SigningStep>("review");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [signingData, setSigningData] = useState<SigningData>({
     signerName: "",
@@ -176,7 +180,27 @@ const SignContractPage: React.FC = () => {
       return;
     }
     setErrorMessage(null);
-    setIsSigningStep(true);
+
+    if (!agreement) return;
+
+    // Determine which party is signing based on email
+    const isPartyA = agreement.partyA === signingData.signerEmail;
+    const isPartyB =
+      agreement.partyB === signingData.signerEmail || !agreement.partyB;
+
+    // Check if the signing party has a deposit requirement and hasn't paid
+    let requiresDeposit = false;
+    if (isPartyA && agreement.depositA > 0 && !agreement.depositAPaid) {
+      requiresDeposit = true;
+    } else if (isPartyB && agreement.depositB > 0 && !agreement.depositBPaid) {
+      requiresDeposit = true;
+    }
+
+    if (requiresDeposit) {
+      setCurrentStep("deposit");
+    } else {
+      setCurrentStep("signing");
+    }
   };
 
   const handleSignContract = async () => {
@@ -210,8 +234,31 @@ const SignContractPage: React.FC = () => {
         throw new Error(errorData.error || "Failed to sign contract");
       }
 
-      // Success - redirect to success page or show success message
-      router.push(`/sign/${agreementId}/success`);
+      if (!agreement) return;
+
+      // Check if this party needs to pay a deposit after signing
+      const isPartyA = agreement.partyA === signingData.signerEmail;
+      const isPartyB =
+        agreement.partyB === signingData.signerEmail || !agreement.partyB;
+
+      let requiresPostSignDeposit = false;
+      if (isPartyA && agreement.depositA > 0 && !agreement.depositAPaid) {
+        requiresPostSignDeposit = true;
+      } else if (
+        isPartyB &&
+        agreement.depositB > 0 &&
+        !agreement.depositBPaid
+      ) {
+        requiresPostSignDeposit = true;
+      }
+
+      if (requiresPostSignDeposit) {
+        // Move to post-signing deposit step
+        setCurrentStep("postSignDeposit");
+      } else {
+        // No deposit required, go directly to success
+        router.push(`/sign/${agreementId}/success`);
+      }
     } catch (error) {
       console.error("Error signing contract:", error);
       setErrorMessage(
@@ -223,8 +270,105 @@ const SignContractPage: React.FC = () => {
   };
 
   const handleBack = () => {
-    setIsSigningStep(false);
+    if (currentStep === "signing") {
+      setCurrentStep("review");
+    } else if (currentStep === "deposit") {
+      setCurrentStep("review");
+    } else if (currentStep === "postSignDeposit") {
+      setCurrentStep("signing");
+    }
     setErrorMessage(null);
+  };
+
+  const handleDepositPayment = async () => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    if (!agreement) return;
+
+    // Determine which party is making the payment
+    const isPartyA = agreement.partyA === signingData.signerEmail;
+    const party = isPartyA ? "A" : "B";
+
+    try {
+      const response = await fetch("/api/deposit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          agreementId,
+          party,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process deposit payment");
+      }
+
+      // Update local agreement state to reflect payment
+      const updatedAgreement = { ...agreement };
+      if (party === "A") {
+        updatedAgreement.depositAPaid = true;
+      } else {
+        updatedAgreement.depositBPaid = true;
+      }
+      setAgreement(updatedAgreement);
+
+      // Move to signing step after successful payment
+      setCurrentStep("signing");
+    } catch (error) {
+      console.error("Error processing deposit payment:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to process deposit payment"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePostSignDepositPayment = async () => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    if (!agreement) return;
+
+    // Determine which party is making the payment
+    const isPartyA = agreement.partyA === signingData.signerEmail;
+    const party = isPartyA ? "A" : "B";
+
+    try {
+      const response = await fetch("/api/deposit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          agreementId,
+          party,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process deposit payment");
+      }
+
+      // After successful deposit payment, redirect to success page
+      router.push(`/sign/${agreementId}/success`);
+    } catch (error) {
+      console.error("Error processing deposit payment:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to process deposit payment"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isLoading) {
@@ -325,40 +469,110 @@ const SignContractPage: React.FC = () => {
 
         {/* Progress Indicator */}
         <div className="flex items-center justify-center mb-8">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
             <div className="flex items-center">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  !isSigningStep
+                  currentStep === "review"
                     ? "bg-blue-500 text-white"
                     : "bg-green-500 text-white"
                 }`}
               >
-                {!isSigningStep ? "1" : "✓"}
+                {currentStep === "review" ? "1" : "✓"}
               </div>
               <span className="ml-2 text-sm text-gray-600">
                 Review Contract
               </span>
             </div>
-            <div className="w-16 h-1 bg-gray-300">
+            <div className="w-12 h-1 bg-gray-300">
               <div
                 className={`h-1 transition-all duration-300 ${
-                  isSigningStep ? "w-full bg-blue-500" : "w-0"
+                  currentStep !== "review" ? "w-full bg-blue-500" : "w-0"
                 }`}
               ></div>
             </div>
+            {agreement &&
+              (agreement.depositA > 0 || agreement.depositB > 0) && (
+                <>
+                  <div className="flex items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        currentStep === "deposit"
+                          ? "bg-blue-500 text-white"
+                          : currentStep === "signing" ||
+                            currentStep === "postSignDeposit"
+                          ? "bg-green-500 text-white"
+                          : "bg-gray-300 text-gray-500"
+                      }`}
+                    >
+                      {currentStep === "signing" ||
+                      currentStep === "postSignDeposit"
+                        ? "✓"
+                        : "2"}
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">
+                      Pre-Sign Deposit
+                    </span>
+                  </div>
+                  <div className="w-12 h-1 bg-gray-300">
+                    <div
+                      className={`h-1 transition-all duration-300 ${
+                        currentStep === "signing" ||
+                        currentStep === "postSignDeposit"
+                          ? "w-full bg-blue-500"
+                          : "w-0"
+                      }`}
+                    ></div>
+                  </div>
+                </>
+              )}
             <div className="flex items-center">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  isSigningStep
+                  currentStep === "signing"
                     ? "bg-blue-500 text-white"
+                    : currentStep === "postSignDeposit"
+                    ? "bg-green-500 text-white"
                     : "bg-gray-300 text-gray-500"
                 }`}
               >
-                2
+                {currentStep === "postSignDeposit"
+                  ? "✓"
+                  : agreement &&
+                    (agreement.depositA > 0 || agreement.depositB > 0)
+                  ? "3"
+                  : "2"}
               </div>
               <span className="ml-2 text-sm text-gray-600">Sign Contract</span>
             </div>
+            {agreement &&
+              (agreement.depositA > 0 || agreement.depositB > 0) && (
+                <>
+                  <div className="w-12 h-1 bg-gray-300">
+                    <div
+                      className={`h-1 transition-all duration-300 ${
+                        currentStep === "postSignDeposit"
+                          ? "w-full bg-blue-500"
+                          : "w-0"
+                      }`}
+                    ></div>
+                  </div>
+                  <div className="flex items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        currentStep === "postSignDeposit"
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-300 text-gray-500"
+                      }`}
+                    >
+                      4
+                    </div>
+                    <span className="ml-2 text-sm text-gray-600">
+                      Pay Deposit
+                    </span>
+                  </div>
+                </>
+              )}
           </div>
         </div>
 
@@ -369,7 +583,7 @@ const SignContractPage: React.FC = () => {
         )}
 
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          {!isSigningStep ? (
+          {currentStep === "review" ? (
             // Step 1: Review Contract and Fill Personal Information
             <>
               {/* Contract Content */}
@@ -492,8 +706,190 @@ const SignContractPage: React.FC = () => {
                 </div>
               </div>
             </>
+          ) : currentStep === "deposit" ? (
+            // Step 2: Deposit Payment Step
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                Deposit Payment Required
+              </h2>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-green-800 mb-2">
+                  ✅ Contract Signed Successfully!
+                </h3>
+                <div className="text-sm text-green-700">
+                  <p>
+                    Your contract has been signed successfully. Now you need to
+                    complete the final step by paying your deposit.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-amber-800 mb-2">
+                  💰 Final Step: Deposit Payment
+                </h3>
+                <div className="text-sm text-amber-700">
+                  {(() => {
+                    const isPartyA =
+                      agreement?.partyA === signingData.signerEmail;
+                    const depositAmount = isPartyA
+                      ? agreement?.depositA || 0
+                      : agreement?.depositB || 0;
+                    return (
+                      <>
+                        <p>
+                          To activate the contract, you are required to pay a
+                          deposit of{" "}
+                          <strong>${depositAmount.toFixed(2)}</strong>.
+                        </p>
+                        <p className="mt-2">
+                          This deposit will be held in escrow and released
+                          according to the contract terms. Once paid, the
+                          contract will become active.
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-blue-800 mb-2">Your Details</h3>
+                <div className="text-sm text-blue-700">
+                  <p>
+                    <strong>Name:</strong> {signingData.signerName}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {signingData.signerEmail}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex justify-between">
+                  <button
+                    onClick={handleBack}
+                    className="bg-gray-300 text-gray-700 py-2 px-6 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleDepositPayment}
+                    disabled={isSubmitting}
+                    className={`py-2 px-6 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                      isSubmitting
+                        ? "bg-gray-400 text-gray-700 cursor-not-allowed"
+                        : "bg-green-600 text-white hover:bg-green-700 focus:ring-green-500"
+                    }`}
+                  >
+                    {isSubmitting ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Processing Payment...
+                      </span>
+                    ) : (
+                      (() => {
+                        const isPartyA =
+                          agreement?.partyA === signingData.signerEmail;
+                        const depositAmount = isPartyA
+                          ? agreement?.depositA || 0
+                          : agreement?.depositB || 0;
+                        return `Pay Deposit ($${depositAmount.toFixed(2)})`;
+                      })()
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : currentStep === "postSignDeposit" ? (
+            // Step 3: Post-Signing Deposit Payment
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                Post-Signing Deposit Payment Required
+              </h2>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-amber-800 mb-2">
+                  💰 Deposit Required
+                </h3>
+                <div className="text-sm text-amber-700">
+                  {(() => {
+                    const isPartyA =
+                      agreement?.partyA === signingData.signerEmail;
+                    const depositAmount = isPartyA
+                      ? agreement?.depositA || 0
+                      : agreement?.depositB || 0;
+                    return (
+                      <>
+                        <p>
+                          To complete this contract, you are required to pay a
+                          deposit of{" "}
+                          <strong>${depositAmount.toFixed(2)}</strong>.
+                        </p>
+                        <p className="mt-2">
+                          This deposit will be held in escrow and released
+                          according to the contract terms. You must complete
+                          this payment before proceeding to sign the contract.
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-blue-800 mb-2">Your Details</h3>
+                <div className="text-sm text-blue-700">
+                  <p>
+                    <strong>Name:</strong> {signingData.signerName}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {signingData.signerEmail}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex justify-between">
+                  <button
+                    onClick={handleBack}
+                    className="bg-gray-300 text-gray-700 py-2 px-6 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handlePostSignDepositPayment}
+                    disabled={isSubmitting}
+                    className={`py-2 px-6 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                      isSubmitting
+                        ? "bg-gray-400 text-gray-700 cursor-not-allowed"
+                        : "bg-green-600 text-white hover:bg-green-700 focus:ring-green-500"
+                    }`}
+                  >
+                    {isSubmitting ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Processing Payment...
+                      </span>
+                    ) : (
+                      (() => {
+                        const isPartyA =
+                          agreement?.partyA === signingData.signerEmail;
+                        const depositAmount = isPartyA
+                          ? agreement?.depositA || 0
+                          : agreement?.depositB || 0;
+                        return `Complete Contract - Pay Deposit ($${depositAmount.toFixed(
+                          2
+                        )})`;
+                      })()
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
-            // Step 2: Final Signing Step
+            // Step 4: Final Signing Step
             <div className="p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
                 Final Step: Sign the Contract
@@ -512,7 +908,14 @@ const SignContractPage: React.FC = () => {
                   </p>
                   <p>
                     <strong>Your Deposit Commitment:</strong> $
-                    {(agreement?.depositB || 0).toFixed(2)}
+                    {(() => {
+                      const isPartyA =
+                        agreement?.partyA === signingData.signerEmail;
+                      const depositAmount = isPartyA
+                        ? agreement?.depositA || 0
+                        : agreement?.depositB || 0;
+                      return depositAmount.toFixed(2);
+                    })()}
                   </p>
                 </div>
               </div>
@@ -524,7 +927,17 @@ const SignContractPage: React.FC = () => {
                 <div className="text-sm text-yellow-700">
                   <p>
                     By signing this contract, you agree to deposit{" "}
-                    <strong>${(agreement?.depositB || 0).toFixed(2)}</strong>{" "}
+                    <strong>
+                      $
+                      {(() => {
+                        const isPartyA =
+                          agreement?.partyA === signingData.signerEmail;
+                        const depositAmount = isPartyA
+                          ? agreement?.depositA || 0
+                          : agreement?.depositB || 0;
+                        return depositAmount.toFixed(2);
+                      })()}
+                    </strong>{" "}
                     into escrow. This amount will be held securely until the
                     contract terms are fulfilled or the contract is resolved.
                   </p>
@@ -543,9 +956,9 @@ const SignContractPage: React.FC = () => {
                   <span className="ml-2 text-sm text-gray-700">
                     I have read and understood the contract terms above. I agree
                     to be bound by the terms and conditions set forth in this
-                    contract. By checking this box and clicking "Sign Contract"
-                    below, I am providing my electronic signature to this
-                    agreement.
+                    contract. By checking this box and clicking &quot;Sign
+                    Contract&quot; below, I am providing my electronic signature
+                    to this agreement.
                   </span>
                 </label>
               </div>
