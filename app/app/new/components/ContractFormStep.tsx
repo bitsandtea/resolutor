@@ -1,7 +1,7 @@
 "use client";
 
+import { ContractDefinition, ContractFormData, FormField } from "@/types";
 import React, { ChangeEvent } from "react";
-import { ContractDefinition, ContractFormData, FormField } from "../types";
 
 interface ContractFormStepProps {
   currentDefinition: ContractDefinition | null;
@@ -33,12 +33,10 @@ const ContractFormStep: React.FC<ContractFormStepProps> = ({
   selectedDefinitionFilename,
 }) => {
   const renderFormFieldInternal = (field: FormField) => {
-    console.log("Rendering field", field);
     const commonProps = {
       name: field.id,
       id: field.id,
       onChange: onFormFieldChange,
-      key: field.id,
     };
 
     // if (field.isSectionHeader) {
@@ -254,7 +252,6 @@ const ContractFormStep: React.FC<ContractFormStepProps> = ({
   }
 
   if (!currentDefinition) return null; // Should not happen if parent logic is correct
-  console.log("Form Fields", formFields);
   return (
     <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
       <p className="text-lg text-gray-600 mb-2">

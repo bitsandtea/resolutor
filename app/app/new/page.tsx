@@ -1,10 +1,17 @@
 "use client";
 
-import { rentalLeaseDefinition } from "@/contracts/defined";
+import {
+  ContractDefinition,
+  ContractFormData,
+  ContractPlaceholder,
+  ContractSection,
+  ContractSigner,
+  FormField,
+} from "@/types";
 import React, { ChangeEvent, useEffect, useState } from "react";
 import ContractFormStep from "./components/ContractFormStep";
 import ContractSelectionStep from "./components/ContractSelectionStep";
-import { ContractDefinition, ContractFormData, FormField } from "./types";
+import ContractSignersStep from "./components/ContractSignersStep";
 
 // --- START: Type Definitions ---
 // Removed local type definitions as they are now imported
@@ -14,7 +21,7 @@ import { ContractDefinition, ContractFormData, FormField } from "./types";
 
 const NewContractPage: React.FC = () => {
   const [uiStep, setUiStep] = useState<
-    "selectContract" | "fillForm" | "generating"
+    "selectContract" | "fillForm" | "manageSigners" | "generating" | "success"
   >("selectContract");
   const [availableDefinitions, setAvailableDefinitions] = useState<
     { filename: string; name: string }[]
@@ -32,6 +39,11 @@ const NewContractPage: React.FC = () => {
   const [formData, setFormData] = useState<ContractFormData>({});
   const [isLoading, setIsLoading] = useState<boolean>(false); // Initially false, true during async ops
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [signers, setSigners] = useState<ContractSigner[]>([]);
+  const [contractResult, setContractResult] = useState<{
+    agreementId: string;
+    cid: string;
+  } | null>(null);
 
   // Effect to fetch available contract definitions
   useEffect(() => {
@@ -72,6 +84,7 @@ const NewContractPage: React.FC = () => {
       setTemplateOriginalContent("");
       setFormFields([]);
       setFormData({});
+      setSigners([]);
       return;
     }
 
@@ -82,10 +95,16 @@ const NewContractPage: React.FC = () => {
         // Fetch the definition JSON using the filename
         let definitionData: ContractDefinition;
         if (selectedDefinitionFilename === "rentalLeaseDefinition") {
-          definitionData = rentalLeaseDefinition as ContractDefinition;
+          const rentalLeaseDefinition = await import(
+            "@/public/contracts/defined/rentalLease.definition.json"
+          );
+          definitionData = rentalLeaseDefinition.default as ContractDefinition;
         } else {
           // TODO: replace with actual definition
-          definitionData = rentalLeaseDefinition as ContractDefinition;
+          const rentalLeaseDefinition = await import(
+            "@/public/contracts/defined/rentalLease.definition.json"
+          );
+          definitionData = rentalLeaseDefinition.default as ContractDefinition;
           // const definitionData = await import(
           //   `../../contracts/defined/${selectedDefinitionFilename}`
           // );
@@ -131,6 +150,7 @@ const NewContractPage: React.FC = () => {
         setCurrentDefinition(null);
         setTemplateOriginalContent("");
         setFormFields([]);
+        setSigners([]);
         setUiStep("selectContract"); // Revert to selection on error
       } finally {
         setIsLoading(false);
@@ -140,6 +160,45 @@ const NewContractPage: React.FC = () => {
     loadDefinitionAndTemplate();
   }, [selectedDefinitionFilename]);
 
+  // Function to provide placeholder data for form fields
+  const getPlaceholderValue = (placeholderId: string): string => {
+    const placeholderData: Record<string, string> = {
+      OWNER_NAME: "John Smith",
+      RESIDENT_NAME: "Vitalik Buterin",
+      RENTAL_ADDRESS: "123 Crypto Street, Apt 4B",
+      CITY: "San Francisco",
+      RENT_AMOUNT: "2500",
+      RENT_DUE_DAY: "1st",
+      LEASE_START_DATE: "2024-02-01",
+      LEASE_END_DATE: "2025-01-31",
+      LEASE_TYPE: "fixed",
+      PAYABLE_TO: "John Smith",
+      PAYMENT_METHOD: "Online Portal",
+      FIRST_MONTH_RENT: "2500",
+      SECURITY_DEPOSIT: "2500",
+      TOTAL_PAYMENT: "5000",
+      DEPOSIT_REFUND_DAYS: "30",
+      LATE_FEE: "75",
+      LATE_FEE_PERCENTAGE: "5",
+      LATE_AFTER_DAY: "5th day of the month",
+      NSF_FEE: "35",
+      UTILITIES_EXCEPTIONS: "Water and Trash",
+      APPROVED_OCCUPANTS: "",
+      PET_DEPOSIT: "500",
+      PET_RENT: "50",
+      PARKING_SPACE: "Spot #42",
+      PARKING_FEE: "150",
+      OWNER_ADDRESS_FOR_NOTICES:
+        "456 Property Management Ave, San Francisco, CA 94105",
+      INVENTORY_ITEMS:
+        "Refrigerator (Samsung RF23M8070SG), Stove (GE Profile PGS930SELSS), Dishwasher (Bosch SHPM65Z55N), Washer/Dryer (LG WM3900HWA/DLEX3900W)",
+      KEY_DETAILS: "2x front door keys, 1x mailbox key, 1x garage remote",
+      ADDITIONS_EXCEPTIONS:
+        "Tenant may install smart home devices with written consent",
+    };
+    return placeholderData[placeholderId] || "";
+  };
+
   // NEW: Function to parse the contract definition JSON into form fields
   const parseContractDefinition = (definition: ContractDefinition) => {
     const newFormFields: FormField[] = [];
@@ -148,8 +207,11 @@ const NewContractPage: React.FC = () => {
     // Optional: Process sections to create headers
     if (definition.sections) {
       definition.sections
-        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-        .forEach((section) => {
+        .sort(
+          (a: ContractSection, b: ContractSection) =>
+            (a.displayOrder || 0) - (b.displayOrder || 0)
+        )
+        .forEach((section: ContractSection) => {
           newFormFields.push({
             id: `section_header_${section.sectionId}`,
             label: section.title,
@@ -161,7 +223,7 @@ const NewContractPage: React.FC = () => {
         });
     }
 
-    definition.placeholders.forEach((p) => {
+    definition.placeholders.forEach((p: ContractPlaceholder) => {
       let fieldType: FormField["type"] = "text";
       if (p.dataType === "boolean") {
         fieldType = "checkbox";
@@ -199,16 +261,21 @@ const NewContractPage: React.FC = () => {
         // The main formField can represent the group, or we handle it in rendering
         // For simplicity, renderFormField will iterate options if fieldType is radio.
         newFormFields.push(formField); // Add the main field descriptor
+        const placeholderData = getPlaceholderValue(p.id);
         newFormData[p.id] =
-          p.defaultValue ?? (p.options.length > 0 ? p.options[0].value : "");
+          p.defaultValue ??
+          placeholderData ??
+          (p.options.length > 0 ? p.options[0].value : "");
       } else {
         newFormFields.push(formField);
         if (p.dataType === "boolean") {
           newFormData[p.id] =
             p.defaultValue !== undefined ? Boolean(p.defaultValue) : false;
         } else {
+          // Set placeholder data for demo purposes
+          const placeholderData = getPlaceholderValue(p.id);
           newFormData[p.id] =
-            p.defaultValue !== undefined ? p.defaultValue : "";
+            p.defaultValue !== undefined ? p.defaultValue : placeholderData;
         }
       }
     });
@@ -231,12 +298,12 @@ const NewContractPage: React.FC = () => {
     const { name, value, type } = e.target;
     if (type === "checkbox") {
       const { checked } = e.target as HTMLInputElement;
-      setFormData((prev) => ({ ...prev, [name]: checked }));
+      setFormData((prev: ContractFormData) => ({ ...prev, [name]: checked }));
     } else if (type === "radio") {
       // For radio, name is the group id (placeholder.id), value is the selected option's value
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      setFormData((prev: ContractFormData) => ({ ...prev, [name]: value }));
     } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      setFormData((prev: ContractFormData) => ({ ...prev, [name]: value }));
     }
   };
 
@@ -244,34 +311,45 @@ const NewContractPage: React.FC = () => {
     if (!currentDefinition || !templateOriginalContent) return "";
     let populatedText = templateOriginalContent;
 
-    currentDefinition.placeholders.forEach((placeholder) => {
-      // Using a regex that matches {{ID}}, {{ ID }}, {{ID }}, etc.
-      const regex = new RegExp(
-        `{{\s*${placeholder.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*}}`,
-        "g"
-      );
-      const value = formData[placeholder.id];
-
-      if (value !== undefined) {
-        populatedText = populatedText.replace(regex, String(value));
-      } else if (placeholder.defaultValue !== undefined) {
-        populatedText = populatedText.replace(
-          regex,
-          String(placeholder.defaultValue)
+    currentDefinition.placeholders.forEach(
+      (placeholder: ContractPlaceholder) => {
+        // Using a regex that matches {{ID}}, {{ ID }}, {{ID }}, etc.
+        const regex = new RegExp(
+          `{{\s*${placeholder.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*}}`,
+          "g"
         );
-      } else {
-        // Optional: replace with empty string or a notice like "[NOT_FILLED]"
-        // populatedText = populatedText.replace(regex, "");
+        const value = formData[placeholder.id];
+
+        if (value !== undefined) {
+          populatedText = populatedText.replace(regex, String(value));
+        } else if (placeholder.defaultValue !== undefined) {
+          populatedText = populatedText.replace(
+            regex,
+            String(placeholder.defaultValue)
+          );
+        } else {
+          // Optional: replace with empty string or a notice like "[NOT_FILLED]"
+          // populatedText = populatedText.replace(regex, "");
+        }
       }
-    });
+    );
     return populatedText;
   };
 
   const handleSaveContract = async () => {
     if (!currentDefinition) {
       setErrorMessage("No contract definition loaded.");
+      setUiStep("manageSigners");
       return;
     }
+
+    const creatorSigner = signers.find((s) => s.role === "creator");
+    if (!creatorSigner || !creatorSigner.email) {
+      setErrorMessage("Creator information is required to save the contract.");
+      setUiStep("manageSigners");
+      return;
+    }
+
     setIsLoading(true);
     setUiStep("generating");
     setErrorMessage(null);
@@ -282,12 +360,22 @@ const NewContractPage: React.FC = () => {
     }.md`;
 
     try {
+      const otherSigner = signers.find((s) => s.role === "signer");
+
       const response = await fetch("/api/save-contract", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ filename, content: populatedContract }),
+        body: JSON.stringify({
+          filename,
+          content: populatedContract,
+          templateType: selectedDefinitionFilename || "unknown",
+          partyA: creatorSigner.email, // Using email as partyA identifier for now
+          partyB: otherSigner?.email || null, // Party B email
+          depositA: creatorSigner.depositAmount || 0, // Deposit amount for creator
+          depositB: otherSigner?.depositAmount || 0, // Deposit amount for other signer
+        }),
       });
 
       if (!response.ok) {
@@ -297,21 +385,122 @@ const NewContractPage: React.FC = () => {
         );
       }
       const result = await response.json();
-      alert(`Contract saved successfully: ${result.path}`);
+      setContractResult(result);
+      setUiStep("success");
     } catch (error) {
       console.error("Error saving contract:", error);
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to save contract."
       );
+      // On error, stay on the current step (manageSigners) so user can retry
+      // Ensure we have the necessary state to show the manageSigners step
+      if (!currentDefinition || !signers.length) {
+        console.error(
+          "Critical state missing after save error, resetting wizard"
+        );
+        resetWizard();
+        return;
+      }
+      setUiStep("manageSigners");
     } finally {
       setIsLoading(false);
-      setUiStep("selectContract");
-      setSelectedDefinitionFilename(null);
-      setCurrentDefinition(null);
-      setContractName("MyContract");
-      setFormFields([]);
-      setFormData({});
     }
+  };
+
+  const handleFormStepNext = () => {
+    // Initialize creator signer and a default second signer when moving from form to signers
+    const creatorSigner: ContractSigner = {
+      id: "creator_" + Date.now(),
+      name: "John Smith",
+      email: "john.smith@company.com",
+      role: "creator",
+      status: "pending",
+      depositAmount: 0,
+    };
+
+    const defaultSigner: ContractSigner = {
+      id: "signer_" + Date.now(),
+      name: "Michael Davis",
+      email: "michael.davis@company.com",
+      role: "signer",
+      status: "pending",
+      depositAmount: 1000,
+    };
+
+    setSigners([creatorSigner, defaultSigner]);
+    setUiStep("manageSigners");
+  };
+
+  const handleSignersStepNext = () => {
+    setUiStep("generating");
+    handleSaveContract();
+  };
+
+  const handleSignersStepBack = () => {
+    setUiStep("fillForm");
+  };
+
+  const generateShareableMessage = (
+    contractTitle: string,
+    creatorName: string,
+    signUrl: string
+  ): string => {
+    return `📋 You've been invited to review and sign: "${contractTitle}"
+
+👤 Created by: ${creatorName}
+
+🔗 Review & Sign: ${signUrl}
+
+⏰ Valid for 7 days
+Powered by Resolutor`;
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("Copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy: ", err);
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      alert("Copied to clipboard!");
+    }
+  };
+
+  const shareViaWhatsApp = (message: string) => {
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
+  };
+
+  const shareViaTelegram = (message: string) => {
+    const telegramUrl = `https://t.me/share/url?text=${encodeURIComponent(
+      message
+    )}`;
+    window.open(telegramUrl, "_blank");
+  };
+
+  const shareViaEmail = (subject: string, body: string) => {
+    const emailUrl = `mailto:?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+    window.open(emailUrl);
+  };
+
+  const resetWizard = () => {
+    setUiStep("selectContract");
+    setSelectedDefinitionFilename(null);
+    setCurrentDefinition(null);
+    setContractName("MyContract");
+    setFormFields([]);
+    setFormData({});
+    setSigners([]);
+    setContractResult(null);
+    setErrorMessage(null);
   };
 
   const inputBaseClasses =
@@ -366,6 +555,7 @@ const NewContractPage: React.FC = () => {
             setUiStep("selectContract");
             setSelectedDefinitionFilename(null);
             setErrorMessage(null);
+            setSigners([]);
           }}
           className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
         >
@@ -384,6 +574,236 @@ const NewContractPage: React.FC = () => {
             : "Loading..."}
         </p>
         {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
+      </div>
+    );
+  }
+
+  if (uiStep === "success" && contractResult && currentDefinition) {
+    const creatorSigner = signers.find((s) => s.role === "creator");
+    const otherSigners = signers.filter((s) => s.role !== "creator");
+
+    return (
+      <div className="flex flex-col items-center w-full">
+        <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
+          <div className="text-center space-y-6">
+            {/* Success Icon */}
+            <div className="flex justify-center">
+              <div className="bg-green-100 rounded-full p-6">
+                <svg
+                  className="w-16 h-16 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Success Message */}
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                Contract Created Successfully! 🎉
+              </h1>
+              <p className="text-lg text-gray-600">
+                Your contract has been generated and is ready for signatures
+              </p>
+            </div>
+
+            {/* Contract Summary */}
+            <div className="bg-gray-50 p-6 rounded-lg text-left space-y-4">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                Contract Summary
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-gray-700">
+                    Contract Name:
+                  </span>
+                  <p className="text-gray-600">{contractName}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">
+                    Contract Type:
+                  </span>
+                  <p className="text-gray-600">
+                    {currentDefinition.templateMeta.title}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">
+                    Agreement ID:
+                  </span>
+                  <p className="text-gray-600 font-mono text-xs">
+                    {contractResult.agreementId}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">IPFS CID:</span>
+                  <p className="text-gray-600 font-mono text-xs">
+                    {contractResult.cid}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Signers Summary */}
+            <div className="bg-blue-50 p-6 rounded-lg text-left space-y-4">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                Signers & Next Steps
+              </h2>
+
+              {creatorSigner && (
+                <div className="mb-4">
+                  <h3 className="font-medium text-gray-700 mb-2">
+                    Contract Creator
+                  </h3>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="font-medium">{creatorSigner.name}</p>
+                    <p className="text-gray-600">{creatorSigner.email}</p>
+                    <p className="text-blue-600 text-sm">
+                      💰 Deposit Amount: $
+                      {(creatorSigner.depositAmount || 0).toFixed(2)}
+                    </p>
+                    <p className="text-green-600 text-sm">✓ Contract created</p>
+                  </div>
+                </div>
+              )}
+
+              {otherSigners.length > 0 && (
+                <div>
+                  <h3 className="font-medium text-gray-700 mb-2">
+                    Pending Signers
+                  </h3>
+                  <div className="space-y-2">
+                    {otherSigners.map((signer) => (
+                      <div
+                        key={signer.id}
+                        className="bg-white p-3 rounded border"
+                      >
+                        <p className="font-medium">{signer.name}</p>
+                        <p className="text-gray-600">{signer.email}</p>
+                        <p className="text-blue-600 text-sm">
+                          💰 Deposit Amount: $
+                          {(signer.depositAmount || 0).toFixed(2)}
+                        </p>
+                        <p className="text-orange-600 text-sm">
+                          ⏳ Awaiting signature
+                        </p>
+
+                        {/* Share Options for Each Signer */}
+                        <div className="mt-3 pt-3 border-t">
+                          <p className="text-sm font-medium text-gray-700 mb-2">
+                            Share signing link with {signer.name}:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => {
+                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                copyToClipboard(signUrl);
+                              }}
+                              className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
+                            >
+                              📋 Copy Link
+                            </button>
+                            <button
+                              onClick={() => {
+                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                const message = generateShareableMessage(
+                                  contractName,
+                                  creatorSigner?.name || "Contract Creator",
+                                  signUrl
+                                );
+                                copyToClipboard(message);
+                              }}
+                              className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                            >
+                              📋 Copy Message
+                            </button>
+                            <button
+                              onClick={() => {
+                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                const message = generateShareableMessage(
+                                  contractName,
+                                  creatorSigner?.name || "Contract Creator",
+                                  signUrl
+                                );
+                                shareViaWhatsApp(message);
+                              }}
+                              className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                            >
+                              💬 WhatsApp
+                            </button>
+                            <button
+                              onClick={() => {
+                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                const message = generateShareableMessage(
+                                  contractName,
+                                  creatorSigner?.name || "Contract Creator",
+                                  signUrl
+                                );
+                                shareViaTelegram(message);
+                              }}
+                              className="bg-blue-400 text-white px-3 py-1 rounded text-sm hover:bg-blue-500"
+                            >
+                              ✈️ Telegram
+                            </button>
+                            <button
+                              onClick={() => {
+                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                const subject = `Contract Signature Request: ${contractName}`;
+                                const message = generateShareableMessage(
+                                  contractName,
+                                  creatorSigner?.name || "Contract Creator",
+                                  signUrl
+                                );
+                                shareViaEmail(subject, message);
+                              }}
+                              className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
+                            >
+                              📧 Email
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {otherSigners.length === 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded">
+                  <p className="text-yellow-800 text-sm">
+                    <strong>Note:</strong> No additional signers were added.
+                    This contract is ready for your signature only.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-center space-x-4 pt-6">
+              <button
+                onClick={resetWizard}
+                className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 font-medium"
+              >
+                Create Another Contract
+              </button>
+              <button
+                onClick={() => (window.location.href = "/")}
+                className="bg-gray-500 text-white py-3 px-6 rounded-lg hover:bg-gray-600 font-medium"
+              >
+                Go to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -414,6 +834,9 @@ const NewContractPage: React.FC = () => {
         {errorMessage && uiStep === "fillForm" && (
           <p className="text-red-500 mb-4">{errorMessage}</p>
         )}
+        {errorMessage && uiStep === "manageSigners" && (
+          <p className="text-red-500 mb-4">{errorMessage}</p>
+        )}
 
         <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
           {uiStep === "fillForm" && currentDefinition && (
@@ -427,9 +850,34 @@ const NewContractPage: React.FC = () => {
               errorMessage={errorMessage}
               onContractNameChange={setContractName}
               onFormFieldChange={handleChange}
-              onSubmit={handleSaveContract}
+              onSubmit={handleFormStepNext}
               selectedDefinitionFilename={selectedDefinitionFilename}
             />
+          )}
+
+          {uiStep === "manageSigners" && currentDefinition && (
+            <ContractSignersStep
+              signers={signers}
+              onSignersChange={setSigners}
+              onNext={handleSignersStepNext}
+              onBack={handleSignersStepBack}
+              isLoading={isLoading}
+              inputBaseClasses={inputBaseClasses}
+            />
+          )}
+
+          {uiStep === "manageSigners" && !currentDefinition && (
+            <div className="text-center space-y-4">
+              <p className="text-red-500 text-lg">
+                Failed to maintain contract state. Please start over.
+              </p>
+              <button
+                onClick={resetWizard}
+                className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+              >
+                Start Over
+              </button>
+            </div>
           )}
         </div>
       </div>

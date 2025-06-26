@@ -16,8 +16,8 @@ model Agreement {
   templateType  String? // "rental", "freelancer", etc.
   partyA        String // Party A's wallet address
   partyB        String? // Party B's wallet address
-  depositA      Boolean @default(false) // Party A deposited
-  depositB      Boolean @default(false) // Party B deposited
+  depositA      Float @default(0) // Party A deposit amount
+  depositB      Float @default(0) // Party B deposit amount
   status        String @default("pending") // pending, active, disputed, resolved
   createdAt     DateTime @default(now())
 

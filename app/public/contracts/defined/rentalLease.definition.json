@@ -3,7 +3,7 @@
     "templateId": "rentalLease-v1.0",
     "title": "Residential Lease Agreement",
     "description": "Standard residential lease agreement template definition.",
-    "templateFile": "contracts/rentalLease.md"
+    "templateFile": "contracts/raw/rentalLease.md"
   },
   "parties": [
     {
@@ -537,51 +537,6 @@
       "dataType": "text",
       "required": false,
       "sectionId": "receivedItems"
-    },
-    {
-      "id": "RESIDENT1_DATE",
-      "label": "Resident 1 Signature Date",
-      "dataType": "date",
-      "required": true,
-      "sectionId": "basicInfo"
-    },
-    {
-      "id": "RESIDENT2_DATE",
-      "label": "Resident 2 Signature Date (if applicable)",
-      "dataType": "date",
-      "required": false,
-      "sectionId": "basicInfo"
-    },
-    {
-      "id": "OWNER_DATE",
-      "label": "Owner/Agent Signature Date",
-      "dataType": "date",
-      "required": true,
-      "sectionId": "basicInfo"
-    }
-  ],
-  "signatureBlocks": [
-    {
-      "signatureBlockId": "resident1Signature",
-      "signerRoleId": "resident",
-      "label": "RESIDENT Signature:",
-      "datePlaceholderId": "RESIDENT1_DATE",
-      "required": true
-    },
-    {
-      "signatureBlockId": "resident2Signature",
-      "signerRoleId": "resident",
-      "label": "RESIDENT Signature (Additional):",
-      "datePlaceholderId": "RESIDENT2_DATE",
-      "required": false,
-      "description": "Use if there is a second resident signing."
-    },
-    {
-      "signatureBlockId": "ownerSignature",
-      "signerRoleId": "owner",
-      "label": "OWNER/Agent Signature:",
-      "datePlaceholderId": "OWNER_DATE",
-      "required": true
     }
   ]
 }

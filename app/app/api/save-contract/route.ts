@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import fs from "fs/promises"; // For file system operations
 import { NextRequest, NextResponse } from "next/server";
@@ -39,6 +39,9 @@ export async function POST(req: NextRequest) {
       content,
       templateType,
       partyA, // Expecting partyA (e.g., wallet address of the creator)
+      partyB, // Party B email (optional, can be null if no second signer)
+      depositA, // Deposit amount for party A
+      depositB, // Deposit amount for party B (optional, defaults to 0)
     } = body;
 
     if (!filename || !content || !partyA) {
@@ -64,9 +67,10 @@ export async function POST(req: NextRequest) {
         cid: cid,
         templateType: templateType || "unknown",
         partyA: partyA,
-        // partyB will be null initially, to be filled when counterparty interacts
+        partyB: partyB || null, // Party B email if provided, null otherwise
         status: "pending", // Default status as per schema
-        // depositA and depositB default to false as per schema
+        depositA: depositA || 0, // Deposit amount for party A
+        depositB: depositB || 0, // Deposit amount for party B
       },
     });
 

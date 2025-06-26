@@ -4,37 +4,37 @@
 
 This **Rental Agreement** (the "**Agreement**") sets forth the complete terms and conditions under which the parties, whose signatures appear below, agree to lease the premises.
 
-**OWNER (Landlord/Lessor/Agent):** `{{OWNER_NAME}}`
-**RESIDENT (Tenant/Lessee):** `{{RESIDENT_NAME}}`
-**Premises Address:** `{{RENTAL_ADDRESS}}, {{CITY}}`
+**OWNER (Landlord/Lessor/Agent):** `John Smith`
+**RESIDENT (Tenant/Lessee):** `Vitalik Buterin`
+**Premises Address:** `123 Crypto Street, Apt 4B, San Francisco`
 
 ---
 
 ## **1. TERMS**
 
-- **Monthly Rent:** \${{RENT\_AMOUNT}} due on the **{{RENT\_DUE\_DAY}}** of each month.
-- **Lease Start Date:** {{LEASE\_START\_DATE}}
+- **Monthly Rent:** \$2500 due on the **1st** of each month.
+- **Lease Start Date:** 2024-02-01
 - Lease Type (select one):
 
-  - [ ] **Fixed Term Lease** until **{{LEASE\_END\_DATE}}**. Converts to month-to-month afterward.
-  - [ ] **Month-to-Month Tenancy** beginning **{{LEASE\_START\_DATE}}**, terminable by 30-day written notice.
+  - [ ] **Fixed Term Lease** until **2025-01-31**. Converts to month-to-month afterward.
+  - [ ] **Month-to-Month Tenancy** beginning **2024-02-01**, terminable by 30-day written notice.
 
 ---
 
 ## **2. PAYMENTS**
 
-- Rent is payable to: `{{PAYABLE_TO}}`
-- Payment Method: `{{PAYMENT_METHOD}}`
-- First Month Rent: \${{FIRST\_MONTH\_RENT}}
-- Security Deposit: \${{SECURITY\_DEPOSIT}}
-- Additional Fees: \${{ADDITIONAL\_FEES}} for `{{ADDITIONAL_FEES_DESCRIPTION}}`
-- **Total Due at Signing:** \${{TOTAL\_PAYMENT}}
+- Rent is payable to: `John Smith`
+- Payment Method: `Online Portal`
+- First Month Rent: \$2500
+- Security Deposit: \$2500
+- Additional Fees: \$ for ``
+- **Total Due at Signing:** \$5000
 
 ---
 
 ## **3. SECURITY DEPOSIT**
 
-- Refundable within **{{DEPOSIT\_REFUND\_DAYS}}** days of move-out, minus deductions for:
+- Refundable within **30** days of move-out, minus deductions for:
 
   - Unpaid rent
   - Cleaning fees
@@ -46,22 +46,22 @@ This **Rental Agreement** (the "**Agreement**") sets forth the complete terms an
 
 ## **4. LATE CHARGES**
 
-- Late Fee: \${{LATE\_FEE}} (not exceeding {{LATE\_FEE\_PERCENTAGE}}% of rent)
-- Charged if rent is unpaid after the **{{LATE\_AFTER\_DAY}}**
-- Returned check fee: \${{NSF\_FEE}}
+- Late Fee: \$75 (not exceeding 5% of rent)
+- Charged if rent is unpaid after the **5th day of the month**
+- Returned check fee: \$35
 
 ---
 
 ## **5. UTILITIES**
 
-- Resident is responsible for all utilities **except:** `{{UTILITIES_EXCEPTIONS}}`
+- Resident is responsible for all utilities **except:** `Water and Trash`
 
 ---
 
 ## **6. OCCUPANTS**
 
 Only the following may reside for 15+ days:
-`{{APPROVED_OCCUPANTS}}`
+``
 Guests beyond 15 days without written consent are a breach.
 
 ---
@@ -71,8 +71,8 @@ Guests beyond 15 days without written consent are a breach.
 No pets unless authorized in writing.
 If allowed:
 
-- Pet Deposit: \${{PET\_DEPOSIT}}
-- Additional Monthly Rent: \${{PET\_RENT}}
+- Pet Deposit: \$500
+- Additional Monthly Rent: \$50
 - Insurance required per OWNER's discretion.
 
 ---
@@ -85,8 +85,8 @@ Items over 10 gallons (e.g., waterbeds) require written consent and insurance.
 
 ## **9. PARKING**
 
-- Assigned Parking: `{{PARKING_SPACE}}`
-- Monthly Parking Fee: \${{PARKING\_FEE}}
+- Assigned Parking: `Spot #42`
+- Monthly Parking Fee: \$150
 - No vehicle maintenance or unapproved vehicles permitted.
 
 ---
@@ -219,21 +219,21 @@ Check all that apply:
 
 ## **28. ADDITIONS AND/OR EXCEPTIONS**
 
-`{{ADDITIONS_EXCEPTIONS}}`
+`Tenant may install smart home devices with written consent`
 
 ---
 
 ## **29. NOTICES**
 
-- **To Resident:** `{{RENTAL_ADDRESS}}`
-- **To Owner:** `{{OWNER_ADDRESS}}`
+- **To Resident:** `123 Crypto Street, Apt 4B`
+- **To Owner:** `456 Property Management Ave, San Francisco, CA 94105`
 
 ---
 
 ## **30. INVENTORY**
 
 Premises contains the following items:
-`{{INVENTORY_ITEMS}}`
+`Refrigerator (Samsung RF23M8070SG), Stove (GE Profile PGS930SELSS), Dishwasher (Bosch SHPM65Z55N), Washer/Dryer (LG WM3900HWA/DLEX3900W)`
 
 ---
 
@@ -241,10 +241,10 @@ Premises contains the following items:
 
 Resident received:
 
-- [ ] Keys: `{{KEY_DETAILS}}`
+- [ ] Keys: `2x front door keys, 1x mailbox key, 1x garage remote`
 - [ ] House Rules
 - [ ] Pet Agreement
-- [ ] Other: `{{OTHER_ADDENDUMS}}`
+- [ ] Other: ``
 
 ---
 
@@ -253,14 +253,3 @@ Resident received:
 This is the full agreement. No oral changes apply. Amendments must be in writing.
 
 ---
-
-## **SIGNATURES**
-
-**RESIDENT Signature:** \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
-**Date:** `{{RESIDENT1_DATE}}`
-
-**RESIDENT Signature:** \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
-**Date:** `{{RESIDENT2_DATE}}`
-
-**OWNER/Agent Signature:** \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_
-**Date:** `{{OWNER_DATE}}`

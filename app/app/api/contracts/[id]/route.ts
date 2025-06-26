@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import fs from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
@@ -68,6 +68,8 @@ export async function GET(
           partyA: agreement.partyA,
           partyB: agreement.partyB,
           status: agreement.status,
+          depositA: agreement.depositA,
+          depositB: agreement.depositB,
           createdAt: agreement.createdAt,
           // Add any other details from the 'agreement' object you want to send to the frontend
         },
