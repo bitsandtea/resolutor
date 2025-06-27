@@ -9,25 +9,34 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 contract MultiSigAgreement is ReentrancyGuard, Initializable {
     using SafeERC20 for IERC20;
 
-    enum Status { Pending, Active, Disputed, Resolved }
+    enum Status { 
+        Created,        // 0 - Contract created, party B unknown
+        Signed,         // 1 - Party B has signed, both parties known
+        PartialDeposit, // 2 - One party has given allowance/deposit
+        FullDeposit,    // 3 - Both parties have allowances, deposits can be taken
+        Active,         // 4 - Deposits taken, agreement active
+        Disputed,       // 5 - Dispute opened
+        Resolved        // 6 - Final resolution executed
+    }
 
     struct Proposal {
         uint256 amountToA;
         uint256 amountToB;
-        string proposalCid;
-        mapping(address => bool) approvals;
         uint8 approvalCount;
+        mapping(address => bool) approvals;
     }
 
     struct AgreementData {
         address partyA;
-        address partyB;
+        address partyB;  // Can be address(0) initially
         address mediator;
         uint256 depositA;
         uint256 depositB;
         Status status;
-        string manifestCid;
-        string[] evidenceCids;
+        address filecoinStorageManager;  // Reference to Filecoin StorageManager
+        address filecoinAccessControl;   // Reference to Filecoin AccessControl
+        bool partyAApproved;
+        bool partyBApproved;
     }
 
     AgreementData public agreement;
@@ -38,10 +47,13 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     uint256 public constant DEPOSIT_TIMEOUT = 7 days;
     uint256 public constant MAX_DEPOSIT = 1000000 * 10**18; // 1M tokens max
 
-    event AgreementCreated(address indexed contractAddr, address indexed partyA, address indexed partyB);
-    event Deposited(address indexed from, uint256 amount);
+    event AgreementCreated(address indexed contractAddr, address indexed partyA);
+    event ContractSigned(address indexed partyB);
+    event PartyApproved(address indexed party);
+    event DepositsReady();
+    event DepositsTaken(uint256 amountA, uint256 amountB);
     event Activated();
-    event DisputeOpened(address indexed opener, string evidenceCid);
+    event DisputeOpened(address indexed opener);
     event ResolutionProposed(address indexed proposer);
     event ResolutionApproved(address indexed approver);
     event ResolutionExecuted(uint256 amountToA, uint256 amountToB);
@@ -65,6 +77,11 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         _;
     }
 
+    modifier onlyWhenSigned() {
+        require(agreement.partyB != address(0), "Contract not signed yet");
+        _;
+    }
+
     constructor() {
         // Disable initializers for the implementation contract
         _disableInitializers();
@@ -72,79 +89,105 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
 
     function initialize(
         address _partyA,
-        address _partyB,
         address _mediator,
         uint256 _depositA,
         uint256 _depositB,
         address _token,
-        string calldata _manifestCid
+        address _filecoinStorageManager,
+        address _filecoinAccessControl
     ) external initializer {
-        require(_partyA != address(0) && _partyB != address(0) && _mediator != address(0), "Invalid addresses");
-        require(_partyA != _partyB && _partyA != _mediator && _partyB != _mediator, "Addresses must be unique");
+        require(_partyA != address(0) && _mediator != address(0), "Invalid addresses");
+        require(_partyA != _mediator, "Party A and mediator must be different");
         require(_depositA > 0 && _depositB > 0, "Deposits must be positive");
         require(_depositA <= MAX_DEPOSIT && _depositB <= MAX_DEPOSIT, "Deposit exceeds maximum");
         require(_token != address(0), "Invalid token address");
+        require(_filecoinStorageManager != address(0), "Invalid storage manager address");
+        require(_filecoinAccessControl != address(0), "Invalid access control address");
 
         agreement.partyA = _partyA;
-        agreement.partyB = _partyB;
+        agreement.partyB = address(0);  // Unknown initially
         agreement.mediator = _mediator;
         agreement.depositA = _depositA;
         agreement.depositB = _depositB;
-        agreement.status = Status.Pending;
-        agreement.manifestCid = _manifestCid;
+        agreement.status = Status.Created;
+        agreement.filecoinStorageManager = _filecoinStorageManager;
+        agreement.filecoinAccessControl = _filecoinAccessControl;
+        agreement.partyAApproved = false;
+        agreement.partyBApproved = false;
 
         token = IERC20(_token);
         creationTimestamp = block.timestamp;
 
-        // Check if we received both deposits from the factory
-        uint256 currentBalance = token.balanceOf(address(this));
-        
-        if (currentBalance >= _depositA) {
-            emit Deposited(_partyA, _depositA);
-            
-            if (currentBalance >= _depositA + _depositB) {
-                // Both deposits received
-                emit Deposited(_partyB, _depositB);
-                agreement.status = Status.Active;
-                emit Activated();
-            }
-        }
-
-        emit AgreementCreated(address(this), _partyA, _partyB);
+        emit AgreementCreated(address(this), _partyA);
     }
 
-    function depositByPartyB() external nonReentrant {
-        require(msg.sender == agreement.partyB, "Only party B can call this");
-        require(agreement.status == Status.Pending, "Agreement not in pending state");
+    function signContract() external nonReentrant {
+        require(agreement.status == Status.Created, "Contract already signed or invalid status");
+        require(agreement.partyB == address(0), "Party B already set");
+        require(msg.sender != agreement.partyA && msg.sender != agreement.mediator, "Party A or mediator cannot be party B");
 
-        token.safeTransferFrom(msg.sender, address(this), agreement.depositB);
-        emit Deposited(msg.sender, agreement.depositB);
+        agreement.partyB = msg.sender;
+        agreement.status = Status.Signed;
+
+        emit ContractSigned(msg.sender);
+    }
+
+    function approveDeposit() external nonReentrant onlyPartyAOrB onlyWhenSigned {
+        require(agreement.status == Status.Signed || agreement.status == Status.PartialDeposit, "Invalid status for approval");
+        
+        if (msg.sender == agreement.partyA) {
+            require(!agreement.partyAApproved, "Party A already approved");
+            require(token.allowance(agreement.partyA, address(this)) >= agreement.depositA, "Insufficient allowance from party A");
+            agreement.partyAApproved = true;
+            emit PartyApproved(agreement.partyA);
+        } else if (msg.sender == agreement.partyB) {
+            require(!agreement.partyBApproved, "Party B already approved");
+            require(token.allowance(agreement.partyB, address(this)) >= agreement.depositB, "Insufficient allowance from party B");
+            agreement.partyBApproved = true;
+            emit PartyApproved(agreement.partyB);
+        }
+
+        // Update status based on approvals
+        if (agreement.partyAApproved && agreement.partyBApproved) {
+            agreement.status = Status.FullDeposit;
+            emit DepositsReady();
+        } else if (agreement.partyAApproved || agreement.partyBApproved) {
+            agreement.status = Status.PartialDeposit;
+        }
+    }
+
+    function takeDeposits() external nonReentrant onlyWhenSigned {
+        require(agreement.status == Status.FullDeposit, "Both parties must approve first");
+        require(agreement.partyAApproved && agreement.partyBApproved, "Both parties must have approved");
+
+        // Take deposits from both parties
+        token.safeTransferFrom(agreement.partyA, address(this), agreement.depositA);
+        token.safeTransferFrom(agreement.partyB, address(this), agreement.depositB);
 
         agreement.status = Status.Active;
+        
+        emit DepositsTaken(agreement.depositA, agreement.depositB);
         emit Activated();
     }
 
-    function openDispute(string calldata evidenceCid) external nonReentrant onlyPartyAOrB {
+    function openDispute() external nonReentrant onlyPartyAOrB onlyWhenSigned {
         require(agreement.status == Status.Active, "Agreement must be active");
         
         agreement.status = Status.Disputed;
-        agreement.evidenceCids.push(evidenceCid);
         
-        emit DisputeOpened(msg.sender, evidenceCid);
+        emit DisputeOpened(msg.sender);
     }
 
     function proposeResolution(
         uint256 amountToA,
-        uint256 amountToB,
-        string calldata proposalCid
-    ) external nonReentrant onlyParties {
+        uint256 amountToB
+    ) external nonReentrant onlyParties onlyWhenSigned {
         require(agreement.status == Status.Disputed, "Agreement must be disputed");
         require(amountToA + amountToB == agreement.depositA + agreement.depositB, "Amounts must sum to total deposits");
 
         // Reset current proposal
         currentProp.amountToA = amountToA;
         currentProp.amountToB = amountToB;
-        currentProp.proposalCid = proposalCid;
         currentProp.approvalCount = 0;
 
         // Reset all approvals
@@ -155,7 +198,7 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         emit ResolutionProposed(msg.sender);
     }
 
-    function approveResolution() external nonReentrant onlyParties {
+    function approveResolution() external nonReentrant onlyParties onlyWhenSigned {
         require(agreement.status == Status.Disputed, "Agreement must be disputed");
         require(!currentProp.approvals[msg.sender], "Already approved");
 
@@ -171,7 +214,7 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     }
 
     function refundExpired() external nonReentrant {
-        require(agreement.status == Status.Pending, "Agreement must be pending");
+        require(agreement.status == Status.Created || agreement.status == Status.Signed || agreement.status == Status.PartialDeposit, "Invalid status for refund");
         require(block.timestamp >= creationTimestamp + DEPOSIT_TIMEOUT, "Timeout not reached");
 
         agreement.status = Status.Resolved;
@@ -205,12 +248,13 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         uint256 depositA,
         uint256 depositB,
         Status status,
-        string memory manifestCid,
-        string[] memory evidenceCids,
+        address filecoinStorageManager,
+        address filecoinAccessControl,
         uint256 propAmountToA,
         uint256 propAmountToB,
-        string memory proposalCid,
-        uint8 approvalCount
+        uint8 approvalCount,
+        bool partyAApproved,
+        bool partyBApproved
     ) {
         return (
             agreement.partyA,
@@ -219,12 +263,13 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
             agreement.depositA,
             agreement.depositB,
             agreement.status,
-            agreement.manifestCid,
-            agreement.evidenceCids,
+            agreement.filecoinStorageManager,
+            agreement.filecoinAccessControl,
             currentProp.amountToA,
             currentProp.amountToB,
-            currentProp.proposalCid,
-            currentProp.approvalCount
+            currentProp.approvalCount,
+            agreement.partyAApproved,
+            agreement.partyBApproved
         );
     }
 } 

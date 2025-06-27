@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-network-helpers";
 import "@nomicfoundation/hardhat-toolbox";
@@ -5,6 +8,11 @@ import "@nomicfoundation/hardhat-toolbox";
 import { HardhatUserConfig } from "hardhat/config";
 
 const config: HardhatUserConfig = {
+  paths: {
+    sources: "./filecoin",
+    cache: "./cache",
+    artifacts: "./artifacts",
+  },
   solidity: {
     version: "0.8.20",
     settings: {
@@ -23,10 +31,18 @@ const config: HardhatUserConfig = {
       chainId: 545,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
+    filecoinCalibration: {
+      url: "https://api.calibration.node.glif.io/rpc/v1",
+      chainId: 314159,
+      accounts: process.env.PRIVATE_KEY_FCOIN
+        ? [process.env.PRIVATE_KEY_FCOIN]
+        : [],
+    },
   },
   etherscan: {
     apiKey: {
-      flowEVMTestnet: "your-api-key-here",
+      flowEVMTestnet: process.env.FLOWSCAN_API_KEY || "abc",
+      filecoinCalibration: "abc", // Filfox doesn't require API key for verification
     },
     customChains: [
       {
@@ -35,6 +51,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://evm-testnet.flowscan.io/api",
           browserURL: "https://evm-testnet.flowscan.io",
+        },
+      },
+      {
+        network: "filecoinCalibration",
+        chainId: 314159,
+        urls: {
+          apiURL: "https://api.calibration.node.glif.io/rpc/v1",
+          browserURL: "https://calibration.filfox.info/en",
         },
       },
     ],

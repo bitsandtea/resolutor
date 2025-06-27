@@ -12,7 +12,7 @@ contract AgreementFactory {
     address public immutable implementation;
     address[] public agreements;
 
-    event AgreementCreated(address indexed contractAddr, address indexed partyA, address indexed partyB);
+    event AgreementCreated(address indexed contractAddr, address indexed partyA);
 
     constructor() {
         // Deploy the implementation contract
@@ -21,42 +21,31 @@ contract AgreementFactory {
 
     function createAgreement(
         address _partyA,
-        address _partyB,
         address _mediator,
         uint256 _depositA,
         uint256 _depositB,
         address _token,
-        string calldata _manifestCid
+        address _filecoinStorageManager,
+        address _filecoinAccessControl
     ) external returns (address newAgreement) {
         // Create a minimal proxy clone of the implementation
         newAgreement = Clones.clone(implementation);
 
-        // Pull tokens from parties first
-        IERC20 token = IERC20(_token);
-        token.safeTransferFrom(_partyA, newAgreement, _depositA);
-        
-        // Try to pull from party B, if fails the agreement will be in Pending state
-        try token.transferFrom(_partyB, newAgreement, _depositB) {
-            // Both deposits successful
-        } catch {
-            // Party B hasn't approved yet, will remain in Pending
-        }
-
-        // Initialize the new agreement
+        // Initialize the new agreement (party B unknown, no deposits taken yet)
         MultiSigAgreement(newAgreement).initialize(
             _partyA,
-            _partyB,
             _mediator,
             _depositA,
             _depositB,
             _token,
-            _manifestCid
+            _filecoinStorageManager,
+            _filecoinAccessControl
         );
 
         // Track the new agreement
         agreements.push(newAgreement);
 
-        emit AgreementCreated(newAgreement, _partyA, _partyB);
+        emit AgreementCreated(newAgreement, _partyA);
 
         return newAgreement;
     }
