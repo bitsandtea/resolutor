@@ -42,7 +42,7 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: {
       flowEVMTestnet: process.env.FLOWSCAN_API_KEY || "abc",
-      filecoinCalibration: "abc", // Filfox doesn't require API key for verification
+      filecoinCalibration: "abc",
     },
     customChains: [
       {
@@ -57,8 +57,8 @@ const config: HardhatUserConfig = {
         network: "filecoinCalibration",
         chainId: 314159,
         urls: {
-          apiURL: "https://api.calibration.node.glif.io/rpc/v1",
-          browserURL: "https://calibration.filfox.info/en",
+          apiURL: "https://filecoin-testnet.blockscout.com/api",
+          browserURL: "https://filecoin-testnet.blockscout.com/",
         },
       },
     ],
@@ -66,6 +66,9 @@ const config: HardhatUserConfig = {
   typechain: {
     outDir: "typechain-types",
     target: "ethers-v6",
+  },
+  sourcify: {
+    enabled: false,
   },
 };
 

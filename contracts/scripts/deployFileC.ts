@@ -1,4 +1,5 @@
-import { ethers, network, run } from "hardhat";
+import "@nomicfoundation/hardhat-ethers";
+import hre, { network, run } from "hardhat";
 
 async function verifyContract(
   address: string,
@@ -9,6 +10,7 @@ async function verifyContract(
     await run("verify:verify", {
       address: address,
       constructorArguments: constructorArguments,
+      force: true, // Force verification even if already verified
     });
     console.log(`✅ Contract verified at ${address}`);
   } catch (error: any) {
@@ -21,69 +23,49 @@ async function verifyContract(
 }
 
 async function main() {
-  console.log("Starting Filecoin contracts deployment...");
+  console.log("Starting Filecoin CombinedStorageManager deployment...");
 
   // Get the deployer account
-  const [deployer] = await ethers.getSigners();
-  console.log("Deploying contracts with the account:", deployer.address);
+  const [deployer] = await hre.ethers.getSigners();
+  console.log("Deploying contract with the account:", deployer.address);
 
-  const balance = await ethers.provider.getBalance(deployer.address);
-  console.log("Account balance:", ethers.formatEther(balance), "FIL");
+  const balance = await hre.ethers.provider.getBalance(deployer.address);
+  console.log("Account balance:", hre.ethers.formatEther(balance), "FIL");
 
-  // Deploy AccessControlManager first (no constructor parameters)
-  console.log("\n1. Deploying AccessControlManager...");
-  const AccessControlManager = await ethers.getContractFactory(
-    "AccessControlManager"
+  // Deploy CombinedStorageManager (no constructor parameters)
+  console.log("\n1. Deploying CombinedStorageManager...");
+  const CombinedStorageManager = await hre.ethers.getContractFactory(
+    "CombinedStorageManager"
   );
-  const accessControlManager = await AccessControlManager.deploy();
-  await accessControlManager.waitForDeployment();
-  const accessControlAddress = await accessControlManager.getAddress();
-  console.log("AccessControlManager deployed to:", accessControlAddress);
-
-  // Deploy StorageManager (no constructor parameters)
-  console.log("\n2. Deploying StorageManager...");
-  const StorageManager = await ethers.getContractFactory("StorageManager");
-  const storageManager = await StorageManager.deploy();
-  await storageManager.waitForDeployment();
-  const storageManagerAddress = await storageManager.getAddress();
-  console.log("StorageManager deployed to:", storageManagerAddress);
-
-  // Deploy EncryptedStorage with AccessControlManager address
-  console.log("\n3. Deploying EncryptedStorage...");
-  const EncryptedStorage = await ethers.getContractFactory("EncryptedStorage");
-  const encryptedStorage = await EncryptedStorage.deploy(accessControlAddress);
-  await encryptedStorage.waitForDeployment();
-  const encryptedStorageAddress = await encryptedStorage.getAddress();
-  console.log("EncryptedStorage deployed to:", encryptedStorageAddress);
+  const combinedStorageManager = await CombinedStorageManager.deploy();
+  await combinedStorageManager.waitForDeployment();
+  const deployedAddress = await combinedStorageManager.getAddress();
+  console.log("CombinedStorageManager deployed to:", deployedAddress);
 
   console.log("\n=== Deployment Summary ===");
-  console.log("AccessControlManager:", accessControlAddress);
-  console.log("StorageManager:", storageManagerAddress);
-  console.log("EncryptedStorage:", encryptedStorageAddress);
-  console.log("\nAll contracts deployed successfully!");
+  console.log("CombinedStorageManager:", deployedAddress);
+  console.log("\nContract deployed successfully!");
 
-  // Verify contracts (skip for hardhat local network)
+  // Verify contract (skip for hardhat local network)
   if (network.name !== "hardhat") {
     console.log("\n=== Contract Verification ===");
-    console.log("Waiting 30 seconds before verification...");
-    await new Promise((resolve) => setTimeout(resolve, 30000));
+    console.log("Waiting 10 seconds before verification...");
+    await new Promise((resolve) => setTimeout(resolve, 10000));
 
-    // Verify AccessControlManager (no constructor args)
-    await verifyContract(accessControlAddress, []);
-
-    // Verify StorageManager (no constructor args)
-    await verifyContract(storageManagerAddress, []);
-
-    // Verify EncryptedStorage (with AccessControlManager address)
-    await verifyContract(encryptedStorageAddress, [accessControlAddress]);
+    // Verify CombinedStorageManager (no constructor args)
+    console.log("\nVerifying CombinedStorageManager...");
+    await verifyContract(deployedAddress, []);
 
     console.log("\n✅ Verification process completed!");
+    console.log(
+      "Check verified contract at: https://filecoin-testnet.blockscout.com"
+    );
+  } else {
+    console.log("Skipping verification on local hardhat network");
   }
 
   return {
-    accessControlManager: accessControlAddress,
-    storageManager: storageManagerAddress,
-    encryptedStorage: encryptedStorageAddress,
+    combinedStorageManager: deployedAddress,
   };
 }
 

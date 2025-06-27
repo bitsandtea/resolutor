@@ -1,5 +1,5 @@
+import { pinToIPFS } from "@/lib/ipfs";
 import { prisma } from "@/lib/prisma";
-import crypto from "crypto";
 import fs from "fs/promises"; // For file system operations
 import { NextRequest, NextResponse } from "next/server";
 import path from "path"; // For path manipulation
@@ -20,16 +20,6 @@ const ensureContractsDirExists = async () => {
   }
 };
 
-// Placeholder for actual IPFS pinning logic
-async function pinToIPFS(content: string, filename: string): Promise<string> {
-  // In a real scenario, this function would interact with an IPFS pinning service
-  // or a local IPFS node to upload the content and get a CID.
-  console.log(`Simulating IPFS pinning for ${filename}...`);
-  // Generate a random UUID for the CID to avoid collisions
-  const uuid = crypto.randomUUID();
-  return `simulated-ipfs-cid-${uuid}`;
-}
-
 export async function POST(req: NextRequest) {
   try {
     await ensureContractsDirExists(); // Make sure directory exists before saving
@@ -42,6 +32,7 @@ export async function POST(req: NextRequest) {
       partyB, // Party B email (optional, can be null if no second signer)
       depositA, // Deposit amount for party A
       depositB, // Deposit amount for party B (optional, defaults to 0)
+      cid, // Optional CID from frontend IPFS upload
     } = body;
 
     if (!filename || !content || !partyA) {
@@ -54,25 +45,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Save content (e.g., to IPFS or local storage) and get a CID or path
-    const cid = await pinToIPFS(content, filename);
+    // 1. Use provided CID or upload to IPFS via Lighthouse/Filecoin if none provided
+    let finalCid = cid;
+    let newAgreement;
 
-    // 2. Actually save the contract content to a local file for now
-    // The filename for the saved content will be based on the agreement ID for uniqueness
-    // We need the agreement ID first, so this step will be done after creating the agreement record.
-
-    // 3. Create a new Agreement record in the database
-    const newAgreement = await prisma.agreement.create({
+    // 3. Create a new Agreement record in the database first to get the ID
+    newAgreement = await prisma.agreement.create({
       data: {
-        cid: cid,
         templateType: templateType || "unknown",
         partyA: partyA,
-        partyB: partyB || null, // Party B email if provided, null otherwise
+        partyB: partyB || undefined, // Party B email if provided, undefined otherwise
         status: "pending", // Default status as per schema
         depositA: depositA || 0, // Deposit amount for party A
         depositB: depositB || 0, // Deposit amount for party B
+        processStatus: "db_saved", // Update process status
+        currentStep: "ipfs_upload", // Move to next step
       },
     });
+
+    // Upload to IPFS with the new signature if no CID provided
+    if (!finalCid) {
+      console.log("No CID provided, uploading to IPFS...");
+      const uploadResult = await pinToIPFS(
+        content,
+        filename,
+        newAgreement.id,
+        "contract_unsigned"
+      );
+      finalCid = uploadResult.cid;
+    } else {
+      // If CID is provided, still update the agreement with it
+      await prisma.agreement.update({
+        where: { id: newAgreement.id },
+        data: {
+          cid: finalCid,
+          processStatus: "ipfs_uploaded",
+          currentStep: "filecoin_access_deploy",
+          lastStepAt: new Date(),
+        },
+      });
+    }
 
     // 4. Save the actual file content locally, named by agreement ID
     const localFilePath = path.join(contractsDir, `${newAgreement.id}.md`);
@@ -87,7 +99,7 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         agreementId: newAgreement.id,
-        cid: newAgreement.cid,
+        cid: finalCid,
         message: "Agreement created and content saved locally.",
       },
       { status: 201 } // 201 Created

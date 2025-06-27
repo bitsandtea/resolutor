@@ -25,7 +25,8 @@ export interface FormField {
     | "checkbox"
     | "select"
     | "radio"
-    | "group_header";
+    | "group_header"
+    | "preserved_line";
   dataType:
     | "string"
     | "number"
@@ -89,7 +90,7 @@ export interface ContractSigner {
   name: string;
   email: string;
   role: "creator" | "signer";
-  status: "pending" | "invited" | "signed";
+  status: "pending" | "invited" | "signed" | "rejected";
   depositAmount?: number; // Optional deposit amount for this signer
   depositPaid?: boolean; // Whether this signer has paid their deposit
 }
@@ -109,4 +110,144 @@ export interface DepositPaymentStatus {
     amount: number;
     paid: boolean;
   };
+}
+
+// Blockchain deployment types
+
+export type ProcessStatus =
+  | "draft"
+  | "db_saved"
+  | "ipfs_uploaded"
+  | "filecoin_deployed"
+  | "flow_deployed"
+  | "completed"
+  | "failed";
+
+export type DeploymentStepName =
+  | "db_save"
+  | "ipfs_upload"
+  | "contract_signing"
+  | "filecoin_access_deploy"
+  | "flow_deploy";
+
+export type DeploymentStepStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface DeploymentStep {
+  id: string;
+  agreementId: string;
+  stepName: DeploymentStepName;
+  status: DeploymentStepStatus;
+  startedAt: Date;
+  completedAt?: Date;
+  txHash?: string;
+  contractAddr?: string;
+  ipfsCid?: string;
+  errorMessage?: string;
+  gasUsed?: string;
+  blockNumber?: string;
+  retryCount: number;
+  maxRetries: number;
+  metadata?: Record<string, any>;
+}
+
+export interface BlockchainDeploymentState {
+  agreementId: string;
+  processStatus: ProcessStatus;
+  currentStep: string;
+  lastStepAt: Date;
+  errorDetails?: string;
+  retryCount: number;
+
+  // Contract addresses
+  flowContractAddr?: string;
+  filecoinStorageManager?: string;
+  filecoinAccessControl?: string;
+
+  // Transaction hashes
+  flowFactoryTx?: string;
+  filecoinStorageTx?: string;
+  filecoinAccessTx?: string;
+
+  // IPFS data
+  cid?: string;
+
+  // Contract signing
+  contractSigned?: boolean;
+  signedAt?: Date;
+
+  // Steps
+  deploymentSteps: DeploymentStep[];
+}
+
+export interface IPFSUploadResult {
+  cid: string;
+  fileName: string;
+  fileSize: number;
+  uploadedAt: Date;
+}
+
+export interface BlockchainTransactionResult {
+  txHash: string;
+  contractAddr?: string;
+  gasUsed?: string;
+  blockNumber?: string;
+  success: boolean;
+  errorMessage?: string;
+}
+
+// API Response types
+export interface SaveContractResponse {
+  agreementId: string;
+  cid?: string;
+  processStatus: ProcessStatus;
+}
+
+export interface DeploymentStepResponse {
+  success: boolean;
+  step: DeploymentStep;
+  nextStep?: DeploymentStepName;
+  errorMessage?: string;
+}
+
+export interface ResumeDeploymentResponse {
+  success: boolean;
+  currentState: BlockchainDeploymentState;
+  canResume: boolean;
+  nextStep?: DeploymentStepName;
+}
+
+// UI Step types expanded for new workflow
+export type UIStep =
+  | "selectContract"
+  | "fillForm"
+  | "manageSigners"
+  | "reviewContract"
+  | "deploymentProgress"
+  | "deploymentComplete"
+  | "deploymentFailed"
+  | "success";
+
+export interface NetworkConfig {
+  networkName: string;
+  chainId: string;
+  rpcUrl: string;
+  explorerUrl?: string;
+  factoryAddr?: string;
+  storageManager?: string;
+  tokenAddr?: string;
+  isActive: boolean;
+}
+
+// Error types for better error handling
+export interface DeploymentError {
+  step: DeploymentStepName;
+  message: string;
+  txHash?: string;
+  canRetry: boolean;
+  userActionRequired?: string;
 }

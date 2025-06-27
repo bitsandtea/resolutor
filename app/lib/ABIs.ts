@@ -1,3 +1,4 @@
+// ## FLOW ABI's
 export const AgreementFactoryABI = [
   {
     inputs: [],
@@ -1067,6 +1068,406 @@ export const MultiSigAgreementABI = [
       },
     ],
     stateMutability: "view",
+    type: "function",
+  },
+];
+
+// ## Filecoin ABI's
+
+export const AccessControlABI = [
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "partyA",
+        type: "address",
+      },
+      {
+        indexed: false,
+        internalType: "address",
+        name: "flowContract",
+        type: "address",
+      },
+    ],
+    name: "AgreementCreated",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "string",
+        name: "fileCid",
+        type: "string",
+      },
+      {
+        indexed: true,
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+    ],
+    name: "FileStored",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "partyB",
+        type: "address",
+      },
+    ],
+    name: "PartyBSet",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "viewer",
+        type: "address",
+      },
+    ],
+    name: "ViewerAdded",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "viewer",
+        type: "address",
+      },
+    ],
+    name: "ViewerRemoved",
+    type: "event",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "viewer",
+        type: "address",
+      },
+    ],
+    name: "addViewer",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "",
+        type: "string",
+      },
+    ],
+    name: "agreements",
+    outputs: [
+      {
+        internalType: "address",
+        name: "partyA",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "partyB",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "mediator",
+        type: "address",
+      },
+      {
+        internalType: "bool",
+        name: "isActive",
+        type: "bool",
+      },
+      {
+        internalType: "address",
+        name: "flowContractAddr",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "createdAt",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "partyA",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "mediator",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "flowContractAddr",
+        type: "address",
+      },
+    ],
+    name: "createAgreement",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "",
+        type: "string",
+      },
+    ],
+    name: "files",
+    outputs: [
+      {
+        internalType: "string",
+        name: "cid",
+        type: "string",
+      },
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "uint256",
+        name: "uploadedAt",
+        type: "uint256",
+      },
+      {
+        internalType: "bool",
+        name: "exists",
+        type: "bool",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+    ],
+    name: "getAgreement",
+    outputs: [
+      {
+        internalType: "address",
+        name: "partyA",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "partyB",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "mediator",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "flowContractAddr",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "createdAt",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "fileCid",
+        type: "string",
+      },
+    ],
+    name: "getFile",
+    outputs: [
+      {
+        internalType: "string",
+        name: "cid",
+        type: "string",
+      },
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "uint256",
+        name: "uploadedAt",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "user",
+        type: "address",
+      },
+    ],
+    name: "hasAccess",
+    outputs: [
+      {
+        internalType: "bool",
+        name: "",
+        type: "bool",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "user",
+        type: "address",
+      },
+    ],
+    name: "isAuthorizedParty",
+    outputs: [
+      {
+        internalType: "bool",
+        name: "",
+        type: "bool",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "viewer",
+        type: "address",
+      },
+    ],
+    name: "removeViewer",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "partyB",
+        type: "address",
+      },
+    ],
+    name: "setPartyB",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "fileCid",
+        type: "string",
+      },
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+    ],
+    name: "storeFile",
+    outputs: [],
+    stateMutability: "nonpayable",
     type: "function",
   },
 ];

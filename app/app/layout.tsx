@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 // Import fonts from next/font/google
+import "@rainbow-me/rainbowkit/styles.css";
 import { Inter, Roboto_Mono } from "next/font/google";
 import "./globals.css";
+
+import { Providers } from "../lib/providers";
 
 // Configure Inter for sans-serif
 const inter = Inter({
@@ -33,7 +36,7 @@ export default function RootLayout({
         // Apply the font variables to the body
         className={`${inter.variable} ${robotoMono.variable} font-sans antialiased`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

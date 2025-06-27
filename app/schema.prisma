@@ -12,18 +12,75 @@ datasource db {
 
 model Agreement {
   id            String @id @default(cuid())
-  cid           String @unique // IPFS CID of the contract
+  cid           String? // Initial IPFS CID - can be null during creation process
   templateType  String? // "rental", "freelancer", etc.
-  partyA        String // Party A's wallet address
-  partyB        String? // Party B's wallet address
+  partyA        String? // Party A's email/wallet - nullable for drafts
+  partyB        String? // Party B's email/wallet address  
   depositA      Float @default(0) // Party A deposit amount
   depositB      Float @default(0) // Party B deposit amount
   depositAPaid  Boolean @default(false) // Whether Party A has paid their deposit
   depositBPaid  Boolean @default(false) // Whether Party B has paid their deposit
   status        String @default("pending") // pending, active, disputed, resolved
+  
+  // Draft contract data (stored during creation process)
+  contractName  String? // Name of the contract during creation
+  formData      Json? // Form field data as JSON
+  signersData   Json? // Signers array as JSON
+  draftContent  String? // Populated contract text during creation
+  
+  // Flow contract references
+  flowContractAddr String? // Address of deployed Flow MultiSigAgreement
+  flowFactoryTx    String? // Transaction hash of factory creation
+  
+  // Filecoin contract references  
+  filecoinStorageManager String? // Address of Filecoin StorageManager
+  filecoinAccessControl  String? // Address of Filecoin AccessControl
+  filecoinStorageTx      String? // Transaction hash of storage creation
+  filecoinAccessTx       String? // Transaction hash of access control creation
+  
+  // Process tracking
+  processStatus  String @default("draft") // draft, db_saved, ipfs_uploaded, filecoin_deployed, flow_deployed, completed, failed
+  currentStep    String @default("selectContract") // selectContract, fillForm, manageSigners, deploymentProgress, ipfs_upload, filecoin_deploy, flow_deploy, completed
+  lastStepAt     DateTime @default(now())
+  errorDetails   String? // Error details if process failed
+  retryCount     Int @default(0) // Number of retry attempts
+  
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
 
-  disputes Dispute[]
+  deploymentSteps DeploymentStep[]
+  disputes        Dispute[]
+}
+
+model DeploymentStep {
+  id           String @id @default(cuid())
+  agreementId  String
+  stepName     String // "db_save", "ipfs_upload", "filecoin_access_deploy", "filecoin_storage_deploy", "flow_deploy"
+  status       String // "pending", "in_progress", "completed", "failed", "skipped"
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  
+  // Step-specific data
+  txHash       String? // Transaction hash if applicable
+  contractAddr String? // Contract address if applicable  
+  ipfsCid      String? // IPFS CID if applicable
+  errorMessage String? // Error details if failed
+  gasUsed      String? // Gas used for transaction
+  blockNumber  String? // Block number where tx was mined
+  
+  // Retry tracking
+  retryCount   Int @default(0)
+  maxRetries   Int @default(3)
+  
+  // Additional metadata
+  metadata     Json? // Flexible field for step-specific data
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  agreement    Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  
+  @@unique([agreementId, stepName])
 }
 
 model Dispute {
@@ -41,4 +98,42 @@ model Dispute {
   updatedAt       DateTime @updatedAt
 
   agreement Agreement @relation(fields: [agreementId], references: [id])
+}
+
+// New model to track IPFS uploads separately
+model IPFSUpload {
+  id          String @id @default(cuid())
+  agreementId String?
+  fileName    String
+  cid         String @unique
+  fileSize    Int?
+  contentType String?
+  uploadedAt  DateTime @default(now())
+  
+  // File classification
+  fileType    String // "contract_unsigned", "contract_signed", "contract_pdf", "evidence", "ai_rationale"
+  version     Int @default(1) // Version number for contract files
+  
+  // Encryption status (for future use)
+  isEncrypted Boolean @default(false)
+  
+  createdAt   DateTime @default(now())
+}
+
+// Track blockchain network configurations
+model NetworkConfig {
+  id              String @id @default(cuid())
+  networkName     String @unique // "flow-testnet", "filecoin-calibration", etc.
+  chainId         String
+  rpcUrl          String
+  explorerUrl     String?
+  
+  // Contract addresses for this network
+  factoryAddr     String? // Flow AgreementFactory address
+  storageManager  String? // Filecoin StorageManager address  
+  tokenAddr       String? // Mock ERC20 token address
+  
+  isActive        Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

@@ -16,9 +16,8 @@ interface DepositResponse {
   tx: TransactionRequest;
 }
 
-// Mock ERC20 token address for hackathon
-const MOCK_ERC20_ADDRESS = "0x1234567890123456789012345678901234567890";
-const ESCROW_CONTRACT_ADDRESS = "0x0987654321098765432109876543210987654321";
+const MOCK_ERC20_ADDRESS = process.env.MOCK_ERC20_ADDRESS || "";
+const ESCROW_CONTRACT_ADDRESS = process.env.ESCROW_CONTRACT_ADDRESS || "";
 
 export default async function handler(
   req: NextApiRequest,

@@ -1,17 +1,39 @@
 "use client";
 
 import {
+  BlockchainDeploymentState,
   ContractDefinition,
   ContractFormData,
   ContractPlaceholder,
   ContractSection,
   ContractSigner,
   FormField,
+  UIStep,
 } from "@/types";
 import React, { ChangeEvent, useEffect, useState } from "react";
 import ContractFormStep from "./components/ContractFormStep";
 import ContractSelectionStep from "./components/ContractSelectionStep";
 import ContractSignersStep from "./components/ContractSignersStep";
+import DeploymentProgressStep from "./components/DeploymentProgressStep";
+
+// Custom hook for intervals
+function useInterval(callback: () => void, delay: number | null) {
+  const savedCallback = React.useRef<() => void>();
+
+  React.useEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
+
+  React.useEffect(() => {
+    function tick() {
+      savedCallback.current?.();
+    }
+    if (delay !== null) {
+      const id = setInterval(tick, delay);
+      return () => clearInterval(id);
+    }
+  }, [delay]);
+}
 
 // --- START: Type Definitions ---
 // Removed local type definitions as they are now imported
@@ -20,9 +42,7 @@ import ContractSignersStep from "./components/ContractSignersStep";
 // type ContractFormData = Record<string, string | number | boolean | undefined>; // Also removed, part of imported types
 
 const NewContractPage: React.FC = () => {
-  const [uiStep, setUiStep] = useState<
-    "selectContract" | "fillForm" | "manageSigners" | "generating" | "success"
-  >("selectContract");
+  const [uiStep, setUiStep] = useState<UIStep>("selectContract");
   const [availableDefinitions, setAvailableDefinitions] = useState<
     { filename: string; name: string }[]
   >([]);
@@ -37,13 +57,52 @@ const NewContractPage: React.FC = () => {
     useState<string>("");
   const [formFields, setFormFields] = useState<FormField[]>([]);
   const [formData, setFormData] = useState<ContractFormData>({});
-  const [isLoading, setIsLoading] = useState<boolean>(false); // Initially false, true during async ops
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [signers, setSigners] = useState<ContractSigner[]>([]);
   const [contractResult, setContractResult] = useState<{
     agreementId: string;
-    cid: string;
+    cid?: string;
   } | null>(null);
+  const [deploymentState, setDeploymentState] =
+    useState<BlockchainDeploymentState | null>(null);
+
+  // Draft persistence state
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isDraftLoading, setIsDraftLoading] = useState<boolean>(false);
+  const [isDraftSaving, setIsDraftSaving] = useState<boolean>(false);
+
+  // Effect to load draft on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlDraftId = urlParams.get("draftId");
+
+    if (urlDraftId) {
+      // Load specific draft from URL
+      loadDraft(urlDraftId);
+    } else {
+      // Check for test case - if no draftId in URL, use the test one
+      const testDraftId = "cmceyq73u000ap0y84t7f86dd";
+      console.log("No draftId in URL, trying test draftId:", testDraftId);
+
+      // Update URL with test draftId for easier testing
+      const newUrl = `${window.location.pathname}?draftId=${testDraftId}`;
+      window.history.replaceState({}, "", newUrl);
+
+      loadDraft(testDraftId);
+    }
+  }, []);
+
+  // Auto-save effect - save draft when important data changes
+  useInterval(() => {
+    if (
+      uiStep !== "selectContract" &&
+      selectedDefinitionFilename &&
+      !isDraftLoading
+    ) {
+      saveDraft();
+    }
+  }, 10000); // Save every 10 seconds
 
   // Effect to fetch available contract definitions
   useEffect(() => {
@@ -105,9 +164,6 @@ const NewContractPage: React.FC = () => {
             "@/public/contracts/defined/rentalLease.definition.json"
           );
           definitionData = rentalLeaseDefinition.default as ContractDefinition;
-          // const definitionData = await import(
-          //   `../../contracts/defined/${selectedDefinitionFilename}`
-          // );
         }
         setCurrentDefinition(definitionData);
         if (
@@ -139,7 +195,15 @@ const NewContractPage: React.FC = () => {
         } else {
           throw new Error("Template file path not specified in definition.");
         }
-        setUiStep("fillForm");
+        // Only set to fillForm if we're not loading a draft
+        if (!isDraftLoading && uiStep === "selectContract") {
+          setUiStep("fillForm");
+        }
+
+        // Auto-save initial draft when template is loaded
+        setTimeout(() => {
+          saveDraft();
+        }, 500);
       } catch (error) {
         console.error("Error loading definition or template:", error);
         setErrorMessage(
@@ -151,7 +215,7 @@ const NewContractPage: React.FC = () => {
         setTemplateOriginalContent("");
         setFormFields([]);
         setSigners([]);
-        setUiStep("selectContract"); // Revert to selection on error
+        setUiStep("selectContract");
       } finally {
         setIsLoading(false);
       }
@@ -216,8 +280,8 @@ const NewContractPage: React.FC = () => {
             id: `section_header_${section.sectionId}`,
             label: section.title,
             type: "group_header",
-            dataType: "string", // Dummy, not a real input
-            originalLine: section.description, // Can use this to display section description
+            dataType: "string",
+            originalLine: section.description,
             isSectionHeader: true,
           });
         });
@@ -232,14 +296,14 @@ const NewContractPage: React.FC = () => {
       } else if (p.dataType === "number" || p.dataType === "integer") {
         fieldType = "number";
       } else if (p.dataType === "text") {
-        fieldType = "textarea"; // Default longer text to textarea
+        fieldType = "textarea";
       } else if (p.dataType === "string") {
         fieldType = "text";
       }
       if (p.dataType === "enum") {
         fieldType = p.uiHint === "radio" ? "radio" : "select";
       }
-      if (p.uiHint === "textarea") fieldType = "textarea"; // Explicit uiHint overrides
+      if (p.uiHint === "textarea") fieldType = "textarea";
 
       const formField: FormField = {
         id: p.id,
@@ -249,18 +313,14 @@ const NewContractPage: React.FC = () => {
         options: p.options,
         required: p.required,
         description: p.description,
-        placeholderText: p.description || p.label, // Use description or label as placeholder
+        placeholderText: p.description || p.label,
         sectionId: p.sectionId,
         uiHint: p.uiHint,
         dependsOn: p.dependsOn,
-        // groupName will be needed if type is 'radio' for multiple options under one group
       };
 
       if (fieldType === "radio" && p.options) {
-        // For radio, we create one entry for each option, but they share a groupName (p.id)
-        // The main formField can represent the group, or we handle it in rendering
-        // For simplicity, renderFormField will iterate options if fieldType is radio.
-        newFormFields.push(formField); // Add the main field descriptor
+        newFormFields.push(formField);
         const placeholderData = getPlaceholderValue(p.id);
         newFormData[p.id] =
           p.defaultValue ??
@@ -272,7 +332,6 @@ const NewContractPage: React.FC = () => {
           newFormData[p.id] =
             p.defaultValue !== undefined ? Boolean(p.defaultValue) : false;
         } else {
-          // Set placeholder data for demo purposes
           const placeholderData = getPlaceholderValue(p.id);
           newFormData[p.id] =
             p.defaultValue !== undefined ? p.defaultValue : placeholderData;
@@ -280,12 +339,10 @@ const NewContractPage: React.FC = () => {
       }
     });
 
-    // Simple sort: section headers first, then by placeholder order in definition (implicitly)
-    // A more robust sort might use sectionId and placeholder order within sections.
     newFormFields.sort((a, b) => {
       if (a.isSectionHeader && !b.isSectionHeader) return -1;
       if (!a.isSectionHeader && b.isSectionHeader) return 1;
-      return 0; // Keep placeholder order as is for now, or implement more complex sort
+      return 0;
     });
 
     setFormFields(newFormFields);
@@ -300,7 +357,6 @@ const NewContractPage: React.FC = () => {
       const { checked } = e.target as HTMLInputElement;
       setFormData((prev: ContractFormData) => ({ ...prev, [name]: checked }));
     } else if (type === "radio") {
-      // For radio, name is the group id (placeholder.id), value is the selected option's value
       setFormData((prev: ContractFormData) => ({ ...prev, [name]: value }));
     } else {
       setFormData((prev: ContractFormData) => ({ ...prev, [name]: value }));
@@ -313,7 +369,6 @@ const NewContractPage: React.FC = () => {
 
     currentDefinition.placeholders.forEach(
       (placeholder: ContractPlaceholder) => {
-        // Using a regex that matches {{ID}}, {{ ID }}, {{ID }}, etc.
         const regex = new RegExp(
           `{{\s*${placeholder.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*}}`,
           "g"
@@ -327,9 +382,6 @@ const NewContractPage: React.FC = () => {
             regex,
             String(placeholder.defaultValue)
           );
-        } else {
-          // Optional: replace with empty string or a notice like "[NOT_FILLED]"
-          // populatedText = populatedText.replace(regex, "");
         }
       }
     );
@@ -351,7 +403,7 @@ const NewContractPage: React.FC = () => {
     }
 
     setIsLoading(true);
-    setUiStep("generating");
+    setUiStep("deploymentProgress");
     setErrorMessage(null);
 
     const populatedContract = generateContractText();
@@ -371,10 +423,10 @@ const NewContractPage: React.FC = () => {
           filename,
           content: populatedContract,
           templateType: selectedDefinitionFilename || "unknown",
-          partyA: creatorSigner.email, // Using email as partyA identifier for now
-          partyB: otherSigner?.email || null, // Party B email
-          depositA: creatorSigner.depositAmount || 0, // Deposit amount for creator
-          depositB: otherSigner?.depositAmount || 0, // Deposit amount for other signer
+          partyA: creatorSigner.email,
+          partyB: otherSigner?.email || null,
+          depositA: creatorSigner.depositAmount || 0,
+          depositB: otherSigner?.depositAmount || 0,
         }),
       });
 
@@ -386,29 +438,20 @@ const NewContractPage: React.FC = () => {
       }
       const result = await response.json();
       setContractResult(result);
-      setUiStep("success");
+
+      // Contract saved to DB successfully, now UI will handle blockchain deployment
+      setIsLoading(false);
     } catch (error) {
       console.error("Error saving contract:", error);
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to save contract."
       );
-      // On error, stay on the current step (manageSigners) so user can retry
-      // Ensure we have the necessary state to show the manageSigners step
-      if (!currentDefinition || !signers.length) {
-        console.error(
-          "Critical state missing after save error, resetting wizard"
-        );
-        resetWizard();
-        return;
-      }
       setUiStep("manageSigners");
-    } finally {
       setIsLoading(false);
     }
   };
 
   const handleFormStepNext = () => {
-    // Initialize creator signer and a default second signer when moving from form to signers
     const creatorSigner: ContractSigner = {
       id: "creator_" + Date.now(),
       name: "John Smith",
@@ -429,15 +472,36 @@ const NewContractPage: React.FC = () => {
 
     setSigners([creatorSigner, defaultSigner]);
     setUiStep("manageSigners");
+
+    // Save draft after step change
+    setTimeout(() => {
+      saveDraft();
+    }, 100);
   };
 
   const handleSignersStepNext = () => {
-    setUiStep("generating");
+    setUiStep("deploymentProgress");
     handleSaveContract();
   };
 
   const handleSignersStepBack = () => {
     setUiStep("fillForm");
+  };
+
+  const handleDeploymentComplete = (
+    deploymentState: BlockchainDeploymentState
+  ) => {
+    setDeploymentState(deploymentState);
+    setUiStep("success");
+  };
+
+  const handleDeploymentError = (error: string) => {
+    setErrorMessage(error);
+    setUiStep("deploymentFailed");
+  };
+
+  const handleDeploymentBack = () => {
+    setUiStep("manageSigners");
   };
 
   const generateShareableMessage = (
@@ -461,7 +525,6 @@ Powered by Resolutor`;
       alert("Copied to clipboard!");
     } catch (err) {
       console.error("Failed to copy: ", err);
-      // Fallback for older browsers
       const textArea = document.createElement("textarea");
       textArea.value = text;
       document.body.appendChild(textArea);
@@ -500,7 +563,133 @@ Powered by Resolutor`;
     setFormData({});
     setSigners([]);
     setContractResult(null);
+    setDeploymentState(null);
     setErrorMessage(null);
+    setDraftId(null);
+    localStorage.removeItem("draftId");
+  };
+
+  // Draft persistence functions
+  const saveDraft = async () => {
+    if (isDraftSaving) return;
+
+    setIsDraftSaving(true);
+    try {
+      const creatorSigner = signers.find((s) => s.role === "creator");
+      const creatorEmail = creatorSigner?.email || "anonymous@example.com";
+
+      const response = await fetch("/api/save-draft", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          draftId,
+          currentStep: uiStep,
+          selectedDefinitionFilename,
+          contractName,
+          formData,
+          signers,
+          populatedContract: generateContractText(),
+          creatorEmail,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save draft");
+      }
+
+      const result = await response.json();
+      if (result.success && result.draftId) {
+        setDraftId(result.draftId);
+        localStorage.setItem("draftId", result.draftId);
+
+        // Update URL with draft ID if it's not already there
+        const urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.get("draftId")) {
+          const newUrl = `${window.location.pathname}?draftId=${result.draftId}`;
+          window.history.replaceState({}, "", newUrl);
+        }
+      }
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      // Don't show error to user for auto-save
+    } finally {
+      setIsDraftSaving(false);
+    }
+  };
+
+  const loadDraft = async (draftIdToLoad?: string) => {
+    setIsDraftLoading(true);
+    try {
+      const idToUse =
+        draftIdToLoad || draftId || localStorage.getItem("draftId");
+      if (!idToUse) {
+        console.log("No draft ID available");
+        setIsDraftLoading(false);
+        return;
+      }
+
+      console.log("Loading draft with ID:", idToUse);
+
+      const response = await fetch(`/api/save-draft?draftId=${idToUse}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log("Draft not found, clearing local storage");
+          localStorage.removeItem("draftId");
+          setDraftId(null);
+          setIsDraftLoading(false);
+          return;
+        }
+        throw new Error("Failed to load draft");
+      }
+
+      const result = await response.json();
+      if (result.success && result.draft) {
+        const draft = result.draft;
+        console.log("Draft loaded successfully:", {
+          id: draft.id,
+          agreementId: draft.agreementId,
+          currentStep: draft.currentStep,
+          processStatus: draft.processStatus,
+          cid: draft.cid,
+          hasFormData: !!draft.formData,
+          hasSigners: !!draft.signers,
+        });
+
+        setDraftId(draft.id);
+        setUiStep(draft.currentStep || "selectContract");
+        setSelectedDefinitionFilename(draft.selectedDefinitionFilename);
+        setContractName(draft.contractName || "MyContract");
+        setFormData(draft.formData || {});
+        setSigners(draft.signers || []);
+
+        // Always set contractResult if we have a draft ID - this allows deployment progress to work
+        if (draft.agreementId || draft.id) {
+          console.log(
+            "Setting contractResult with agreementId:",
+            draft.agreementId || draft.id
+          );
+          setContractResult({
+            agreementId: draft.agreementId || draft.id,
+            cid: draft.cid,
+          });
+        }
+
+        // If we're supposed to be at deployment progress, make sure we navigate there
+        if (draft.currentStep === "deploymentProgress") {
+          console.log("Navigating to deployment progress step");
+          setUiStep("deploymentProgress");
+        }
+
+        localStorage.setItem("draftId", draft.id);
+      }
+    } catch (error) {
+      console.error("Error loading draft:", error);
+      setErrorMessage("Failed to load saved draft");
+    } finally {
+      setIsDraftLoading(false);
+    }
   };
 
   const inputBaseClasses =
@@ -565,12 +754,94 @@ Powered by Resolutor`;
     );
   }
 
-  if (isLoading || uiStep === "generating") {
+  if (uiStep === "deploymentProgress") {
+    if (!contractResult) {
+      return (
+        <div className="flex flex-col items-center justify-center flex-grow">
+          <p className="text-red-500 text-lg">
+            Contract must be saved before deployment. Please try again.
+          </p>
+          <button
+            onClick={() => setUiStep("manageSigners")}
+            className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+          >
+            Back to Signers
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <DeploymentProgressStep
+        agreementId={contractResult.agreementId}
+        onComplete={handleDeploymentComplete}
+        onError={handleDeploymentError}
+        onBack={handleDeploymentBack}
+        contractContent={generateContractText()}
+        fileName={contractName + ".md"}
+      />
+    );
+  }
+
+  if (uiStep === "deploymentFailed") {
+    return (
+      <div className="flex flex-col items-center justify-center flex-grow">
+        <div className="text-center space-y-4 max-w-2xl">
+          <div className="bg-red-100 rounded-full p-6 mx-auto w-fit">
+            <svg
+              className="w-16 h-16 text-red-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+          </div>
+
+          <h1 className="text-3xl font-bold text-red-600">Deployment Failed</h1>
+          <p className="text-lg text-gray-600">
+            There was an error during the blockchain deployment process.
+          </p>
+
+          {errorMessage && (
+            <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-left">
+              <h3 className="font-semibold text-red-800 mb-2">
+                Error Details:
+              </h3>
+              <p className="text-red-700 text-sm">{errorMessage}</p>
+            </div>
+          )}
+
+          <div className="flex justify-center space-x-4 pt-6">
+            <button
+              onClick={() => setUiStep("deploymentProgress")}
+              className="bg-yellow-500 text-white py-3 px-6 rounded-lg hover:bg-yellow-600 font-medium"
+            >
+              🔄 Try Again
+            </button>
+            <button
+              onClick={() => setUiStep("manageSigners")}
+              className="bg-gray-500 text-white py-3 px-6 rounded-lg hover:bg-gray-600 font-medium"
+            >
+              ← Back to Signers
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center flex-grow">
         <p className="text-gray-600 text-lg">
-          {uiStep === "generating"
-            ? `Generating ${contractName}...`
+          {(uiStep as UIStep) === "deploymentProgress"
+            ? `Processing blockchain deployment...`
             : "Loading..."}
         </p>
         {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
@@ -608,10 +879,11 @@ Powered by Resolutor`;
             {/* Success Message */}
             <div>
               <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                Contract Created Successfully! 🎉
+                🎉 Contract Successfully Deployed!
               </h1>
               <p className="text-lg text-gray-600">
-                Your contract has been generated and is ready for signatures
+                Your contract has been deployed to blockchain and is ready for
+                signatures
               </p>
             </div>
 
@@ -647,9 +919,29 @@ Powered by Resolutor`;
                 <div>
                   <span className="font-medium text-gray-700">IPFS CID:</span>
                   <p className="text-gray-600 font-mono text-xs">
-                    {contractResult.cid}
+                    {contractResult.cid || deploymentState?.cid}
                   </p>
                 </div>
+                {deploymentState?.flowContractAddr && (
+                  <div>
+                    <span className="font-medium text-gray-700">
+                      Flow Contract:
+                    </span>
+                    <p className="text-gray-600 font-mono text-xs">
+                      {deploymentState.flowContractAddr}
+                    </p>
+                  </div>
+                )}
+                {deploymentState?.filecoinStorageManager && (
+                  <div>
+                    <span className="font-medium text-gray-700">
+                      Filecoin Storage:
+                    </span>
+                    <p className="text-gray-600 font-mono text-xs">
+                      {deploymentState.filecoinStorageManager}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -671,7 +963,9 @@ Powered by Resolutor`;
                       💰 Deposit Amount: $
                       {(creatorSigner.depositAmount || 0).toFixed(2)}
                     </p>
-                    <p className="text-green-600 text-sm">✓ Contract created</p>
+                    <p className="text-green-600 text-sm">
+                      ✅ Contract deployed on blockchain
+                    </p>
                   </div>
                 </div>
               )}

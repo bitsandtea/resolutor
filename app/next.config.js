@@ -11,4 +11,23 @@ const nextConfig = {
   experimental: {
     optimizeCss: true,
   },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Suppress pino warnings in the browser
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+    }
+
+    // Suppress pino-pretty warnings
+    config.externals = config.externals || [];
+    config.externals.push("pino-pretty");
+
+    return config;
+  },
 };
+
+module.exports = nextConfig;

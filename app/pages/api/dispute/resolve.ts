@@ -99,7 +99,7 @@ export default async function handler(
       // Mock transaction generation
       response.tx = JSON.stringify(
         generateDepositTransaction(
-          "0x1234567890123456789012345678901234567890",
+          process.env.ESCROW_CONTRACT_ADDRESS || "",
           dispute.agreement.partyA,
           mediationResult.amountToA.toString()
         )
