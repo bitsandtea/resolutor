@@ -1255,11 +1255,6 @@ export const AccessControlABI = [
         name: "mediator",
         type: "address",
       },
-      {
-        internalType: "address",
-        name: "flowContractAddr",
-        type: "address",
-      },
     ],
     name: "createAgreement",
     outputs: [],

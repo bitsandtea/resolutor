@@ -29,7 +29,7 @@ export const stepDefinitions: Record<
 
 export const stepOrder: DeploymentStepName[] = [
   "ipfs_upload",
-  "contract_signing",
   "filecoin_access_deploy",
   "flow_deploy",
+  "contract_signing",
 ];

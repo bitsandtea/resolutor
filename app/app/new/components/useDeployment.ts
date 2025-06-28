@@ -1,3 +1,4 @@
+import { useCreateAccessControl } from "@/lib/storage/createAccess";
 import { useCreateAgreement } from "@/lib/storage/createStorage";
 import {
   BlockchainDeploymentState,
@@ -6,8 +7,11 @@ import {
 } from "@/types";
 import { useEffect, useState } from "react";
 import { parseEther } from "viem";
-import { useAccount, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
 import { stepDefinitions, stepOrder } from "./deploymentSteps";
+
+import { config } from "@/lib/wagmi";
+import { switchChain } from "@wagmi/core";
 
 interface UseDeploymentProps {
   agreementId: string;
@@ -25,11 +29,19 @@ export const useDeployment = ({
   onError,
 }: UseDeploymentProps) => {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const {
     createAgreement,
     isPending: isCreatingAgreement,
     error: createError,
+    txHash: flowTxHash,
   } = useCreateAgreement();
+  const {
+    createAccessControl,
+    isPending: isCreatingAccess,
+    error: accessError,
+    txHash: accessTxHash,
+  } = useCreateAccessControl();
 
   const [deploymentState, setDeploymentState] =
     useState<BlockchainDeploymentState | null>(null);
@@ -40,10 +52,11 @@ export const useDeployment = ({
   const [logs, setLogs] = useState<string[]>([]);
   const [canRetry, setCanRetry] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
+  const [lastPolledTime, setLastPolledTime] = useState<number>(0);
 
   const { isLoading: isTxPending, isSuccess: isTxSuccess } =
     useWaitForTransactionReceipt({
-      hash: pendingTxHash as `0x${string}`,
+      hash: (accessTxHash || flowTxHash || pendingTxHash) as `0x${string}`,
     });
 
   const addLog = (message: string) => {
@@ -53,38 +66,70 @@ export const useDeployment = ({
     ]);
   };
 
-  const checkDeploymentStatus = async () => {
+  const updateDeploymentStep = async (
+    stepName: string,
+    status: string,
+    txHash?: string,
+    contractAddr?: string,
+    errorMessage?: string
+  ) => {
     try {
+      const response = await fetch("/api/update-deployment-step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agreementId,
+          stepName,
+          status,
+          txHash,
+          contractAddr,
+          errorMessage,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        console.error("Failed to update deployment step:", result.error);
+      }
+      return result.success;
+    } catch (error) {
+      console.error("Error updating deployment step:", error);
+      return false;
+    }
+  };
+
+  const checkDeploymentStatus = async (forceRefresh = false) => {
+    try {
+      // Add throttling to prevent excessive API calls
+      const now = Date.now();
+      if (!forceRefresh && now - lastPolledTime < 2000) {
+        return deploymentState;
+      }
+      setLastPolledTime(now);
+
       const response = await fetch(
-        `/api/deployment-status?agreementId=${agreementId}`
+        `/api/deployment-status?agreementId=${encodeURIComponent(agreementId)}`,
+        {
+          method: "GET",
+        }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
       const data = await response.json();
-
       if (data.success) {
-        setDeploymentState(data.currentState);
-        setCanRetry(data.canResume);
+        if (data.currentState) {
+          setDeploymentState(data.currentState);
 
-        if (data.currentState?.deploymentSteps) {
-          const failedSteps = data.currentState.deploymentSteps.filter(
-            (step: { status: string }) => step.status === "failed"
-          );
-          const inProgressSteps = data.currentState.deploymentSteps.filter(
-            (step: { status: string }) => step.status === "in_progress"
-          );
+          // Debug logging for deployment state
+          // console.log("Deployment state updated:", {
+          //   cid: data.currentState.cid,
+          //   processStatus: data.currentState.processStatus,
+          //   currentStep: data.currentState.currentStep,
+          //   nextStep: data.nextStep,
+          //   deploymentSteps: data.currentState.deploymentSteps?.length || 0,
+          // });
 
-          if (failedSteps.length > 0) {
-            addLog(`❌ Found ${failedSteps.length} failed step(s)`);
-            setIsProcessing(false);
-          } else if (inProgressSteps.length > 0) {
-            const currentInProgress = inProgressSteps[0];
-            setCurrentStep(currentInProgress.stepName);
-            addLog(`⏳ Step in progress: ${currentInProgress.stepName}`);
-          } else if (data.isComplete) {
+          // Update current step based on deployment state
+          if (data.isComplete) {
             addLog("🎉 All deployment steps completed successfully!");
             setCurrentStep("completed");
             setIsProcessing(false);
@@ -133,9 +178,8 @@ export const useDeployment = ({
 
     try {
       let response;
-
       if (stepName === "ipfs_upload") {
-        const currentStatus = await checkDeploymentStatus();
+        const currentStatus = await checkDeploymentStatus(true);
         if (currentStatus?.currentState?.cid) {
           addLog(
             `✅ Content already uploaded to IPFS: ${currentStatus.currentState.cid}`
@@ -143,9 +187,9 @@ export const useDeployment = ({
           addLog(
             `🔗 Gateway URL: https://gateway.lighthouse.storage/ipfs/${currentStatus.currentState.cid}`
           );
-          setCurrentStep("contract_signing" as DeploymentStepName);
-          addLog(`⏭️ Moving to next step: contract_signing`);
-          await executeStep("contract_signing" as DeploymentStepName);
+          setCurrentStep("filecoin_access_deploy" as DeploymentStepName);
+          addLog(`⏭️ Moving to next step: filecoin_access_deploy`);
+          await executeStep("filecoin_access_deploy" as DeploymentStepName);
           return;
         }
 
@@ -176,17 +220,49 @@ export const useDeployment = ({
           body: JSON.stringify(requestPayload),
         });
       } else if (stepName === "filecoin_access_deploy") {
-        requestPayload = {
-          agreementId,
-          stepName: "filecoin_access_deploy",
-        };
-        addLog(`🔐 Deploying AccessControlManager contract to Filecoin...`);
+        if (
+          chainId !==
+          Number(process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID)
+        ) {
+          console.log("Switching chain to Filecoin Calibration Chain");
+          await switchChain(config, {
+            chainId: Number(
+              process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
+            ) as 314159,
+          });
+        }
 
-        response = await fetch("/api/deploy-filecoin", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestPayload),
-        });
+        if (!isConnected || !address) {
+          throw new Error(
+            "Wallet not connected. Please connect your wallet first."
+          );
+        }
+
+        addLog(`🔐 Creating an AccessControlManager entry on Filecoin...`);
+
+        // Mark step as in progress
+        await updateDeploymentStep("filecoin_access_deploy", "in_progress");
+
+        try {
+          await createAccessControl(
+            agreementId,
+            address || "",
+            process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || ""
+          );
+
+          addLog(`📋 Transaction submitted`);
+          addLog(`⏳ Waiting for confirmation...`);
+          return { success: true, txHash: "pending" };
+        } catch (walletError) {
+          await updateDeploymentStep(
+            "filecoin_access_deploy",
+            "failed",
+            undefined,
+            undefined,
+            `Wallet transaction failed: ${walletError}`
+          );
+          throw new Error(`Wallet transaction failed: ${walletError}`);
+        }
       } else if (stepName === "flow_deploy") {
         if (!isConnected || !address) {
           throw new Error(
@@ -196,7 +272,7 @@ export const useDeployment = ({
 
         addLog(`⚡ Creating MultiSigAgreement contract via wallet...`);
 
-        const currentState = await checkDeploymentStatus();
+        const currentState = await checkDeploymentStatus(true);
         if (!currentState?.currentState?.cid) {
           throw new Error(
             "IPFS CID not found. Please complete IPFS upload first."
@@ -214,6 +290,7 @@ export const useDeployment = ({
 
           addLog(`📋 Transaction submitted`);
           addLog(`⏳ Waiting for confirmation...`);
+          setPendingTxHash("flow_deploy"); // Set a placeholder for tracking
           return { success: true, txHash: "pending", contractAddr: "pending" };
         } catch (walletError) {
           throw new Error(`Wallet transaction failed: ${walletError}`);
@@ -243,15 +320,11 @@ export const useDeployment = ({
           );
         }
 
-        if (stepName === "filecoin_access_deploy" && result.contractAddr) {
-          addLog(`📍 Contract Address: ${result.contractAddr}`);
-        }
-
         if (result.txHash) {
           addLog(`📋 Transaction Hash: ${result.txHash}`);
         }
 
-        await checkDeploymentStatus();
+        await checkDeploymentStatus(true);
 
         if (result.nextStep && result.nextStep !== "completed") {
           addLog(`⏭️ Proceeding to next step: ${result.nextStep}`);
@@ -261,7 +334,7 @@ export const useDeployment = ({
           addLog("🎉 All deployment steps completed successfully!");
           setCurrentStep("completed");
           setIsProcessing(false);
-          const finalStatus = await checkDeploymentStatus();
+          const finalStatus = await checkDeploymentStatus(true);
           if (finalStatus?.isComplete) {
             onComplete(finalStatus.currentState);
           }
@@ -308,6 +381,26 @@ export const useDeployment = ({
         addLog("✅ Deployment already completed!");
         setIsProcessing(false);
         onComplete(status.currentState);
+        return;
+      }
+
+      // Check for existing CID to avoid duplicate uploads
+      if (status?.currentState?.cid) {
+        addLog(`📁 Content already exists in IPFS: ${status.currentState.cid}`);
+        addLog(
+          `🔗 Gateway URL: https://gateway.lighthouse.storage/ipfs/${status.currentState.cid}`
+        );
+
+        // Skip IPFS upload and proceed to next step
+        if (status.nextStep && status.nextStep !== "ipfs_upload") {
+          addLog(`🔄 Resuming deployment from step: ${status.nextStep}`);
+          await executeStep(status.nextStep as DeploymentStepName);
+        } else {
+          addLog(
+            `⏭️ Skipping IPFS upload, proceeding to access control deploy...`
+          );
+          await executeStep("filecoin_access_deploy");
+        }
         return;
       }
 
@@ -464,16 +557,8 @@ export const useDeployment = ({
       return "pending";
     }
 
-    const step = deploymentState.deploymentSteps?.find(
-      (s) => s.stepName === stepName
-    );
-
-    if (step) {
-      return step.status as DeploymentStepStatus;
-    }
-
-    const stepIndex = stepOrder.indexOf(stepName);
-
+    // First check if we have deployment state indicators (CID, contract addresses)
+    // These are more reliable than deployment steps which might not be recorded properly
     if (stepName === "ipfs_upload" && deploymentState.cid) {
       return "completed";
     }
@@ -490,6 +575,17 @@ export const useDeployment = ({
       return "completed";
     }
 
+    // Then check actual deployment steps
+    const step = deploymentState.deploymentSteps?.find(
+      (s) => s.stepName === stepName
+    );
+
+    if (step) {
+      return step.status as DeploymentStepStatus;
+    }
+
+    // Fallback to step order logic
+    const stepIndex = stepOrder.indexOf(stepName);
     const currentIndex =
       currentStep && currentStep !== "completed"
         ? stepOrder.indexOf(currentStep as DeploymentStepName)
@@ -511,22 +607,257 @@ export const useDeployment = ({
     return null;
   };
 
-  // Handle transaction confirmation for Flow deployment
+  // Handle when access control transaction hash becomes available
   useEffect(() => {
-    if (isTxSuccess && String(currentStep) === "flow_deploy") {
-      addLog(`✅ Transaction confirmed`);
-      addLog(`✅ Completed: Deploy Flow Contract`);
-
-      checkDeploymentStatus().then(() => {
-        addLog("🎉 All deployment steps completed successfully!");
-        setCurrentStep("completed");
-        setIsProcessing(false);
-      });
+    if (accessTxHash && currentStep === "filecoin_access_deploy") {
+      addLog(`📋 Transaction hash received: ${accessTxHash}`);
+      addLog(
+        `🔗 View on Filecoin Explorer: https://calibration.filfox.info/en/message/${accessTxHash}`
+      );
+      updateDeploymentStep(
+        "filecoin_access_deploy",
+        "in_progress",
+        accessTxHash
+      );
     }
-  }, [isTxSuccess, currentStep]);
+  }, [accessTxHash, currentStep]);
 
+  // Handle when flow transaction hash becomes available
   useEffect(() => {
-    checkDeploymentStatus();
+    if (flowTxHash && currentStep === "flow_deploy") {
+      addLog(`📋 Flow transaction hash received: ${flowTxHash}`);
+      addLog(
+        `🔗 View on Flow Explorer: https://evm-testnet.flowscan.io/tx/${flowTxHash}`
+      );
+      updateDeploymentStep("flow_deploy", "in_progress", flowTxHash);
+    }
+  }, [flowTxHash, currentStep]);
+
+  // Handle access control transaction confirmation
+  useEffect(() => {
+    if (
+      isTxSuccess &&
+      accessTxHash &&
+      currentStep === "filecoin_access_deploy"
+    ) {
+      addLog(`✅ Access Control transaction confirmed!`);
+      addLog(`✅ Completed: Deploy Access Control`);
+
+      // Update step as completed
+      updateDeploymentStep("filecoin_access_deploy", "completed", accessTxHash);
+
+      // Proceed to next step
+      setTimeout(async () => {
+        const updatedStatus = await checkDeploymentStatus(true);
+
+        if (
+          updatedStatus?.nextStep &&
+          updatedStatus.nextStep !== "filecoin_access_deploy"
+        ) {
+          addLog(
+            formatTxLogMessage(
+              "⏭️ Proceeding to next step",
+              updatedStatus.nextStep
+            )
+          );
+          setTimeout(() => {
+            executeStep(updatedStatus.nextStep as DeploymentStepName);
+          }, 1000);
+        } else if (updatedStatus?.isComplete) {
+          addLog(
+            formatTxLogMessage(
+              "🎉 All deployment steps completed successfully!",
+              updatedStatus.currentState.cid
+            )
+          );
+          setCurrentStep("completed");
+          setIsProcessing(false);
+          onComplete(updatedStatus.currentState);
+        } else {
+          // Fallback: proceed to flow deployment
+          addLog(formatTxLogMessage("⏭️ Moving to next step", "flow_deploy"));
+          setTimeout(() => {
+            executeStep("flow_deploy");
+          }, 1000);
+        }
+      }, 2000);
+    }
+  }, [isTxSuccess, accessTxHash, currentStep]);
+
+  // Handle access control errors
+  useEffect(() => {
+    if (accessError && currentStep === "filecoin_access_deploy") {
+      addLog(
+        formatTxLogMessage(
+          "❌ Access Control deployment failed",
+          accessError.message
+        )
+      );
+      updateDeploymentStep(
+        "filecoin_access_deploy",
+        "failed",
+        accessTxHash || undefined,
+        undefined,
+        accessError.message
+      );
+      setIsProcessing(false);
+      setCanRetry(true);
+      onError(`Access Control deployment failed: ${accessError.message}`);
+    }
+  }, [accessError, currentStep]);
+
+  // Handle completion of flow agreement creation (wagmi hook)
+  useEffect(() => {
+    // Only handle this if we're currently on the flow_deploy step
+    if (currentStep === "flow_deploy" && pendingTxHash === "flow_deploy") {
+      if (!isCreatingAgreement && !createError) {
+        // Flow agreement creation completed successfully
+        addLog(
+          formatTxLogMessage(
+            "✅ Flow Agreement deployment completed successfully!",
+            flowTxHash
+          )
+        );
+        addLog(
+          formatTxLogMessage("✅ Completed: Deploy Flow Contract", flowTxHash)
+        );
+
+        // Clear pending state
+        setPendingTxHash(null);
+
+        // Check deployment status and proceed to completion
+        setTimeout(async () => {
+          const updatedStatus = await checkDeploymentStatus(true);
+
+          if (updatedStatus?.isComplete) {
+            addLog(
+              formatTxLogMessage(
+                "🎉 All deployment steps completed successfully!",
+                updatedStatus.currentState.cid
+              )
+            );
+            setCurrentStep("completed");
+            setIsProcessing(false);
+            onComplete(updatedStatus.currentState);
+          } else {
+            // Mark as completed manually if backend hasn't updated yet
+            addLog(
+              formatTxLogMessage(
+                "🎉 All deployment steps completed successfully!",
+                updatedStatus.currentState.cid
+              )
+            );
+            setCurrentStep("completed");
+            setIsProcessing(false);
+          }
+        }, 2000);
+      } else if (!isCreatingAgreement && createError) {
+        // Flow agreement creation failed
+        addLog(
+          formatTxLogMessage(
+            "❌ Flow Agreement deployment failed",
+            createError.message
+          )
+        );
+        setPendingTxHash(null);
+        setIsProcessing(false);
+        setCanRetry(true);
+        onError(`Flow Agreement deployment failed: ${createError.message}`);
+      }
+    }
+  }, [isCreatingAgreement, createError, currentStep, pendingTxHash]);
+
+  // Periodic polling for deployment status when processing
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (isProcessing && currentStep && currentStep !== "completed") {
+      interval = setInterval(async () => {
+        const status = await checkDeploymentStatus();
+
+        // Check if step completed on backend without transaction confirmation
+        if (status?.currentState) {
+          const stepStatus = getStepStatus(currentStep as DeploymentStepName);
+          if (stepStatus === "completed" && isProcessing) {
+            addLog(
+              formatTxLogMessage("✅ Step completed on backend", currentStep)
+            );
+
+            if (status.nextStep && status.nextStep !== "completed") {
+              addLog(
+                formatTxLogMessage("⏭️ Moving to next step", status.nextStep)
+              );
+              setCurrentStep(status.nextStep);
+            } else if (status.isComplete) {
+              addLog(
+                formatTxLogMessage(
+                  "🎉 All deployment steps completed!",
+                  status.currentState.cid
+                )
+              );
+              setCurrentStep("completed");
+              setIsProcessing(false);
+              onComplete(status.currentState);
+            }
+          }
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isProcessing, currentStep]);
+
+  // Initial status check and deployment state initialization
+  useEffect(() => {
+    if (agreementId) {
+      const initializeDeploymentState = async () => {
+        addLog("🔍 Checking existing deployment status...");
+        const status = await checkDeploymentStatus(true);
+
+        if (status?.currentState) {
+          // If we have a CID already, log it and mark IPFS as completed
+          if (status.currentState.cid) {
+            addLog(
+              formatTxLogMessage(
+                "📁 Found existing IPFS upload",
+                status.currentState.cid
+              )
+            );
+            addLog(
+              formatTxLogMessage(
+                "🔗 Gateway URL",
+                `https://gateway.lighthouse.storage/ipfs/${status.currentState.cid}`
+              )
+            );
+            addLog(
+              formatTxLogMessage(
+                "✅ IPFS Upload step already completed",
+                status.currentState.cid
+              )
+            );
+          }
+
+          // Set the current step based on what's next
+          if (status.nextStep) {
+            addLog(formatTxLogMessage("📋 Next pending step", status.nextStep));
+            setCurrentStep(status.nextStep as DeploymentStepName);
+          } else if (status.isComplete) {
+            addLog(
+              formatTxLogMessage(
+                "🎉 All deployment steps already completed!",
+                status.currentState.cid
+              )
+            );
+            setCurrentStep("completed");
+            onComplete(status.currentState);
+          }
+        }
+      };
+
+      initializeDeploymentState();
+    }
   }, [agreementId]);
 
   return {
@@ -538,7 +869,9 @@ export const useDeployment = ({
     pendingTxHash,
     isTxPending,
     isCreatingAgreement,
+    isCreatingAccess,
     createError,
+    accessError,
     startDeployment,
     executeNextPendingStep,
     retryDeployment,

@@ -108,6 +108,7 @@ model IPFSUpload {
   cid         String @unique
   fileSize    Int?
   contentType String?
+  contentHash String? // SHA-256 hash of content for duplicate detection
   uploadedAt  DateTime @default(now())
   
   // File classification

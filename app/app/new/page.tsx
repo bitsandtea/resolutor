@@ -98,7 +98,8 @@ const NewContractPage: React.FC = () => {
     if (
       uiStep !== "selectContract" &&
       selectedDefinitionFilename &&
-      !isDraftLoading
+      !isDraftLoading &&
+      uiStep !== "deploymentProgress"
     ) {
       saveDraft();
     }
@@ -427,6 +428,7 @@ const NewContractPage: React.FC = () => {
           partyB: otherSigner?.email || null,
           depositA: creatorSigner.depositAmount || 0,
           depositB: otherSigner?.depositAmount || 0,
+          draftId: draftId, // Pass draftId to update existing agreement
         }),
       });
 
@@ -438,6 +440,13 @@ const NewContractPage: React.FC = () => {
       }
       const result = await response.json();
       setContractResult(result);
+
+      // Update draftId if save-contract returned a new agreement ID
+      if (result.agreementId && result.agreementId !== draftId) {
+        setDraftId(result.agreementId);
+        localStorage.setItem("draftId", result.agreementId);
+        console.log(`Updated draftId from ${draftId} to ${result.agreementId}`);
+      }
 
       // Contract saved to DB successfully, now UI will handle blockchain deployment
       setIsLoading(false);
@@ -601,14 +610,25 @@ Powered by Resolutor`;
 
       const result = await response.json();
       if (result.success && result.draftId) {
-        setDraftId(result.draftId);
-        localStorage.setItem("draftId", result.draftId);
+        // Update draftId if it changed (e.g., new draft created due to old one not found)
+        if (result.draftId !== draftId) {
+          console.log(`Draft ID changed from ${draftId} to ${result.draftId}`);
+          setDraftId(result.draftId);
+          localStorage.setItem("draftId", result.draftId);
 
-        // Update URL with draft ID if it's not already there
-        const urlParams = new URLSearchParams(window.location.search);
-        if (!urlParams.get("draftId")) {
+          // Update URL with new draft ID
           const newUrl = `${window.location.pathname}?draftId=${result.draftId}`;
           window.history.replaceState({}, "", newUrl);
+        } else {
+          setDraftId(result.draftId);
+          localStorage.setItem("draftId", result.draftId);
+
+          // Update URL with draft ID if it's not already there
+          const urlParams = new URLSearchParams(window.location.search);
+          if (!urlParams.get("draftId")) {
+            const newUrl = `${window.location.pathname}?draftId=${result.draftId}`;
+            window.history.replaceState({}, "", newUrl);
+          }
         }
       }
     } catch (error) {
@@ -630,8 +650,6 @@ Powered by Resolutor`;
         return;
       }
 
-      console.log("Loading draft with ID:", idToUse);
-
       const response = await fetch(`/api/save-draft?draftId=${idToUse}`);
       if (!response.ok) {
         if (response.status === 404) {
@@ -647,15 +665,6 @@ Powered by Resolutor`;
       const result = await response.json();
       if (result.success && result.draft) {
         const draft = result.draft;
-        console.log("Draft loaded successfully:", {
-          id: draft.id,
-          agreementId: draft.agreementId,
-          currentStep: draft.currentStep,
-          processStatus: draft.processStatus,
-          cid: draft.cid,
-          hasFormData: !!draft.formData,
-          hasSigners: !!draft.signers,
-        });
 
         setDraftId(draft.id);
         setUiStep(draft.currentStep || "selectContract");
@@ -666,10 +675,6 @@ Powered by Resolutor`;
 
         // Always set contractResult if we have a draft ID - this allows deployment progress to work
         if (draft.agreementId || draft.id) {
-          console.log(
-            "Setting contractResult with agreementId:",
-            draft.agreementId || draft.id
-          );
           setContractResult({
             agreementId: draft.agreementId || draft.id,
             cid: draft.cid,
@@ -678,7 +683,6 @@ Powered by Resolutor`;
 
         // If we're supposed to be at deployment progress, make sure we navigate there
         if (draft.currentStep === "deploymentProgress") {
-          console.log("Navigating to deployment progress step");
           setUiStep("deploymentProgress");
         }
 

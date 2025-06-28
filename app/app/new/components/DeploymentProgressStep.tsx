@@ -1,9 +1,7 @@
-import { useGrantAccess } from "@/lib/storage/createStorage";
 import { BlockchainDeploymentState } from "@/types";
 import React from "react";
 import { useAccount } from "wagmi";
 import DeploymentActions from "./DeploymentActions";
-import DeploymentLogs from "./DeploymentLogs";
 import DeploymentProgress from "./DeploymentProgress";
 import { useDeployment } from "./useDeployment";
 
@@ -25,11 +23,11 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
   fileName,
 }) => {
   const { address, isConnected } = useAccount();
-  const {
-    grantAccess,
-    isPending: isGrantingAccess,
-    error: accessError,
-  } = useGrantAccess();
+  // const {
+  //   grantAccess,
+  //   isPending: isGrantingAccess,
+  //   error: accessError,
+  // } = useGrantAccess();
 
   const {
     deploymentState,
@@ -40,7 +38,9 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
     pendingTxHash,
     isTxPending,
     isCreatingAgreement,
+    isCreatingAccess,
     createError,
+    accessError: deploymentAccessError,
     startDeployment,
     executeNextPendingStep,
     retryDeployment,
@@ -75,12 +75,13 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
         deploymentState={deploymentState}
         canRetry={canRetry}
         isCreatingAgreement={isCreatingAgreement}
-        isGrantingAccess={isGrantingAccess}
+        isCreatingAccess={isCreatingAccess}
+        // isGrantingAccess={isGrantingAccess}
         isTxPending={isTxPending}
         pendingTxHash={pendingTxHash}
-        createError={createError || accessError}
+        createError={createError || deploymentAccessError}
+        // createError={createError || accessError || deploymentAccessError}
         executeNextPendingStep={executeNextPendingStep}
-        startDeployment={startDeployment}
         retryDeployment={retryDeployment}
         resetDeployment={resetDeployment}
         onBack={onBack}
@@ -93,7 +94,21 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
         getStepStatus={getStepStatus}
       />
 
-      <DeploymentLogs logs={logs} />
+      {/* <DeploymentLogs logs={logs} /> */}
+
+      <div className="flex justify-center pt-4">
+        <button
+          onClick={onBack}
+          disabled={isProcessing}
+          className={`py-3 px-6 rounded-lg font-medium ${
+            isProcessing
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+              : "bg-gray-500 text-white hover:bg-gray-600"
+          }`}
+        >
+          ← Back
+        </button>
+      </div>
     </div>
   );
 };

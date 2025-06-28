@@ -10,12 +10,12 @@ interface DeploymentActionsProps {
   deploymentState: BlockchainDeploymentState | null;
   canRetry: boolean;
   isCreatingAgreement: boolean;
-  isGrantingAccess: boolean;
+  isCreatingAccess: boolean;
+  // isGrantingAccess: boolean;
   isTxPending: boolean;
   pendingTxHash: string | null;
   createError: Error | null;
   executeNextPendingStep: () => void;
-  startDeployment: () => void;
   retryDeployment: () => void;
   resetDeployment: () => void;
   onBack: () => void;
@@ -28,32 +28,42 @@ const DeploymentActions: React.FC<DeploymentActionsProps> = ({
   deploymentState,
   canRetry,
   isCreatingAgreement,
-  isGrantingAccess,
+  isCreatingAccess,
+  // isGrantingAccess,
   isTxPending,
   pendingTxHash,
   createError,
   executeNextPendingStep,
-  startDeployment,
   retryDeployment,
   resetDeployment,
   onBack,
 }) => {
+  // Check if we're in a step that requires wallet connection
+  const needsWalletConnection =
+    !isConnected &&
+    (nextPendingStep === "filecoin_access_deploy" ||
+      nextPendingStep === "flow_deploy");
+
   return (
     <div className="space-y-6">
-      {/* Wallet Connection */}
-      <div className="bg-blue-50 p-4 rounded-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">
-              Wallet Connection
-            </h3>
-            <p className="text-sm text-gray-600">
-              Connect your wallet to deploy contracts to the blockchain
-            </p>
+      {/* Wallet Connection - only show when not connected and needed for blockchain steps */}
+      {!isConnected && (
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">
+                Wallet Connection
+              </h3>
+              <p className="text-sm text-gray-600">
+                {needsWalletConnection
+                  ? "Connect your wallet to deploy contracts to the blockchain"
+                  : "Connect your wallet to continue with blockchain deployment"}
+              </p>
+            </div>
+            <ConnectButton />
           </div>
-          <ConnectButton />
         </div>
-      </div>
+      )}
 
       {/* Execute Next Step Button */}
       {isConnected && nextPendingStep && !isProcessing && (
@@ -77,12 +87,16 @@ const DeploymentActions: React.FC<DeploymentActionsProps> = ({
               disabled={
                 isProcessing ||
                 isCreatingAgreement ||
-                isGrantingAccess ||
+                isCreatingAccess ||
+                // isGrantingAccess ||
                 isTxPending
               }
               className="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {isCreatingAgreement || isGrantingAccess || isTxPending ? (
+              {isCreatingAgreement ||
+              isCreatingAccess ||
+              // isGrantingAccess ||
+              isTxPending ? (
                 <>⏳ Processing...</>
               ) : (
                 <>🚀 Execute Next Step</>
@@ -94,15 +108,6 @@ const DeploymentActions: React.FC<DeploymentActionsProps> = ({
 
       {/* Action Buttons */}
       <div className="flex justify-center space-x-4">
-        {!isProcessing && !deploymentState && isConnected && (
-          <button
-            onClick={startDeployment}
-            className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 font-medium"
-          >
-            🚀 Start Deployment
-          </button>
-        )}
-
         {!isProcessing && canRetry && (
           <button
             onClick={retryDeployment}
@@ -120,24 +125,13 @@ const DeploymentActions: React.FC<DeploymentActionsProps> = ({
             🔄 Reset & Start Over
           </button>
         )}
-
-        <button
-          onClick={onBack}
-          disabled={isProcessing}
-          className={`py-3 px-6 rounded-lg font-medium ${
-            isProcessing
-              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-              : "bg-gray-500 text-white hover:bg-gray-600"
-          }`}
-        >
-          ← Back
-        </button>
       </div>
 
       {/* Processing Status */}
       {(isProcessing ||
         isCreatingAgreement ||
-        isGrantingAccess ||
+        isCreatingAccess ||
+        // isGrantingAccess ||
         isTxPending) && (
         <div className="text-center">
           <p className="text-gray-600">

@@ -25,20 +25,41 @@ export async function POST(req: NextRequest) {
     let agreement;
 
     if (draftId) {
-      // Update existing draft
-      agreement = await prisma.agreement.update({
-        where: { id: draftId },
-        data: {
-          currentStep,
-          templateType: selectedDefinitionFilename,
-          contractName,
-          formData: formData ? JSON.stringify(formData) : undefined,
-          signersData: signers ? JSON.stringify(signers) : undefined,
-          draftContent: populatedContract,
-          partyA: creatorEmail,
-          updatedAt: new Date(),
-        },
-      });
+      // Try to update existing draft, create new one if not found
+      try {
+        agreement = await prisma.agreement.update({
+          where: { id: draftId },
+          data: {
+            currentStep,
+            templateType: selectedDefinitionFilename,
+            contractName,
+            formData: formData ? JSON.stringify(formData) : undefined,
+            signersData: signers ? JSON.stringify(signers) : undefined,
+            draftContent: populatedContract,
+            partyA: creatorEmail,
+            updatedAt: new Date(),
+          },
+        });
+      } catch (error: any) {
+        // If record not found (P2025), create a new draft instead
+        if (error.code === "P2025") {
+          console.log(`Draft ${draftId} not found, creating new draft instead`);
+          agreement = await prisma.agreement.create({
+            data: {
+              currentStep,
+              processStatus: "draft",
+              templateType: selectedDefinitionFilename,
+              contractName,
+              formData: formData ? JSON.stringify(formData) : undefined,
+              signersData: signers ? JSON.stringify(signers) : undefined,
+              draftContent: populatedContract,
+              partyA: creatorEmail,
+            },
+          });
+        } else {
+          throw error; // Re-throw other errors
+        }
+      }
     } else {
       // Create new draft
       agreement = await prisma.agreement.create({

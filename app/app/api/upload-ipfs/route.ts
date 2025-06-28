@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { create } from "@web3-storage/w3up-client";
+import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 async function makeStorageClient() {
@@ -34,6 +35,11 @@ function makeFileObjects(name: string, content: string) {
   return files;
 }
 
+// Generate SHA-256 hash of content for duplicate detection
+function generateContentHash(content: string): string {
+  return crypto.createHash("sha256").update(content).digest("hex");
+}
+
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -63,6 +69,97 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate content hash for duplicate detection
+    const contentHash = generateContentHash(content);
+    console.log(`Content hash: ${contentHash}`);
+
+    // Check if identical content already exists in database
+    const existingUpload = await prisma.iPFSUpload.findFirst({
+      where: {
+        OR: [
+          // Check by agreement ID and file type (existing logic)
+          {
+            agreementId,
+            fileType,
+          },
+          // Check by content hash (new logic for cross-agreement duplicates)
+          {
+            contentHash,
+          },
+        ],
+      },
+    });
+
+    if (existingUpload) {
+      console.log(`Found existing IPFS upload with CID: ${existingUpload.cid}`);
+      console.log(`Skipping IPFS upload, reusing existing content...`);
+
+      // Update deployment step to completed for this agreement
+      let ipfsStep = await prisma.deploymentStep.findFirst({
+        where: {
+          agreementId,
+          stepName: "ipfs_upload",
+        },
+      });
+
+      if (!ipfsStep) {
+        ipfsStep = await prisma.deploymentStep.create({
+          data: {
+            agreementId,
+            stepName: "ipfs_upload",
+            status: "completed",
+            ipfsCid: existingUpload.cid,
+            completedAt: new Date(),
+            metadata: {
+              fileName,
+              fileType,
+              fileSize: Buffer.byteLength(content, "utf-8"),
+              reusedExistingUpload: true,
+              originalUploadId: existingUpload.id,
+            },
+          },
+        });
+      } else {
+        ipfsStep = await prisma.deploymentStep.update({
+          where: { id: ipfsStep.id },
+          data: {
+            status: "completed",
+            completedAt: new Date(),
+            ipfsCid: existingUpload.cid,
+            metadata: {
+              ...((ipfsStep.metadata as Record<string, unknown>) || {}),
+              reusedExistingUpload: true,
+              originalUploadId: existingUpload.id,
+            },
+          },
+        });
+      }
+
+      // Update agreement with CID and process status
+      await prisma.agreement.update({
+        where: { id: agreementId },
+        data: {
+          cid: existingUpload.cid,
+          processStatus: "ipfs_uploaded",
+          currentStep: "filecoin_deploy",
+          lastStepAt: new Date(),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        cid: existingUpload.cid,
+        fileName,
+        fileSize: existingUpload.fileSize,
+        uploadedAt: existingUpload.uploadedAt,
+        reusedExisting: true,
+        nextStep: "filecoin_access_deploy",
+      });
+    }
+
+    // No existing content found, proceed with new upload
+    console.log(`No CID provided, uploading to IPFS...`);
+
     // Update deployment step to in_progress
     let ipfsStep = await prisma.deploymentStep.findFirst({
       where: {
@@ -81,6 +178,7 @@ export async function POST(request: NextRequest) {
             fileName,
             fileType,
             fileSize: Buffer.byteLength(content, "utf-8"),
+            contentHash,
           },
         },
       });
@@ -92,6 +190,10 @@ export async function POST(request: NextRequest) {
           startedAt: new Date(),
           errorMessage: null,
           retryCount: ipfsStep.retryCount + 1,
+          metadata: {
+            ...((ipfsStep.metadata as Record<string, unknown>) || {}),
+            contentHash,
+          },
         },
       });
     }
@@ -107,7 +209,7 @@ export async function POST(request: NextRequest) {
 
       console.log(`Successfully uploaded to IPFS: ${cid}`);
 
-      // Record IPFS upload
+      // Record IPFS upload with content hash
       await prisma.iPFSUpload.create({
         data: {
           agreementId,
@@ -116,6 +218,7 @@ export async function POST(request: NextRequest) {
           fileSize: Buffer.byteLength(content, "utf-8"),
           contentType: "text/markdown",
           fileType,
+          contentHash, // Store content hash for future duplicate detection
           version: 1,
         },
       });
@@ -131,6 +234,7 @@ export async function POST(request: NextRequest) {
             ...((ipfsStep.metadata as Record<string, unknown>) || {}),
             uploadedAt: new Date().toISOString(),
             cid,
+            contentHash,
           },
         },
       });

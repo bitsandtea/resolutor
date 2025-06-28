@@ -25,10 +25,73 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
     "michael.davis@company.com"
   );
   const [newSignerDeposit, setNewSignerDeposit] = useState<number>(1000);
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
+
+  // Email validation function
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email.trim());
+  };
+
+  // Wallet address validation function
+  const validateWalletAddress = (address: string): boolean => {
+    return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
+  };
+
+  // Validate signer data
+  const validateSigner = (signer: ContractSigner): string[] => {
+    const errors: string[] = [];
+
+    if (!signer.name || signer.name.trim().length === 0) {
+      errors.push("Name is required");
+    }
+
+    if (!signer.email || signer.email.trim().length === 0) {
+      errors.push("Email or wallet address is required");
+    } else {
+      const trimmedEmail = signer.email.trim();
+      if (
+        !validateEmail(trimmedEmail) &&
+        !validateWalletAddress(trimmedEmail)
+      ) {
+        errors.push("Must be a valid email address or wallet address (0x...)");
+      }
+    }
+
+    return errors;
+  };
+
+  // Validate all signers and update errors
+  const validateAllSigners = () => {
+    const errors: Record<string, string> = {};
+
+    signers.forEach((signer) => {
+      const signerErrors = validateSigner(signer);
+      if (signerErrors.length > 0) {
+        errors[signer.id] = signerErrors.join(", ");
+      }
+    });
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const addSigner = () => {
-    if (!newSignerName.trim() || !newSignerEmail.trim()) {
-      alert("Please fill in both name and email for the new signer");
+    // Validate new signer before adding
+    const tempSigner: ContractSigner = {
+      id: "temp",
+      name: newSignerName.trim(),
+      email: newSignerEmail.trim(),
+      role: "signer",
+      status: "pending",
+      depositAmount: newSignerDeposit,
+    };
+
+    const errors = validateSigner(tempSigner);
+    if (errors.length > 0) {
+      alert("Please fix the following errors:\n" + errors.join("\n"));
       return;
     }
 
@@ -110,18 +173,41 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+                Email / Wallet Address
               </label>
               <input
-                type="email"
+                type="text"
                 value={creatorSigner.email}
-                onChange={(e) =>
-                  updateSigner(creatorSigner.id, "email", e.target.value)
-                }
-                className={inputBaseClasses}
-                placeholder="john.smith@company.com"
+                onChange={(e) => {
+                  updateSigner(creatorSigner.id, "email", e.target.value);
+                  // Clear validation error when user starts typing
+                  if (validationErrors[creatorSigner.id]) {
+                    const newErrors = { ...validationErrors };
+                    delete newErrors[creatorSigner.id];
+                    setValidationErrors(newErrors);
+                  }
+                }}
+                onBlur={() => {
+                  // Validate on blur
+                  const errors = validateSigner(creatorSigner);
+                  if (errors.length > 0) {
+                    setValidationErrors((prev) => ({
+                      ...prev,
+                      [creatorSigner.id]: errors.join(", "),
+                    }));
+                  }
+                }}
+                className={`${inputBaseClasses} ${
+                  validationErrors[creatorSigner.id] ? "border-red-500" : ""
+                }`}
+                placeholder="john.smith@company.com or 0x..."
                 required
               />
+              {validationErrors[creatorSigner.id] && (
+                <p className="mt-1 text-sm text-red-600">
+                  {validationErrors[creatorSigner.id]}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -171,17 +257,40 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
+                      Email / Wallet Address
                     </label>
                     <input
-                      type="email"
+                      type="text"
                       value={signer.email}
-                      onChange={(e) =>
-                        updateSigner(signer.id, "email", e.target.value)
-                      }
-                      className={inputBaseClasses}
-                      placeholder="sarah.johnson@email.com"
+                      onChange={(e) => {
+                        updateSigner(signer.id, "email", e.target.value);
+                        // Clear validation error when user starts typing
+                        if (validationErrors[signer.id]) {
+                          const newErrors = { ...validationErrors };
+                          delete newErrors[signer.id];
+                          setValidationErrors(newErrors);
+                        }
+                      }}
+                      onBlur={() => {
+                        // Validate on blur
+                        const errors = validateSigner(signer);
+                        if (errors.length > 0) {
+                          setValidationErrors((prev) => ({
+                            ...prev,
+                            [signer.id]: errors.join(", "),
+                          }));
+                        }
+                      }}
+                      className={`${inputBaseClasses} ${
+                        validationErrors[signer.id] ? "border-red-500" : ""
+                      }`}
+                      placeholder="sarah.johnson@email.com or 0x..."
                     />
+                    {validationErrors[signer.id] && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {validationErrors[signer.id]}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -221,8 +330,14 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
 
       {/* Add New Signer */}
       {otherSigners.length === 0 && (
-        <div className="bg-gray-50 p-4 rounded border">
-          <h4 className="font-medium text-gray-800 mb-3">Add Signer</h4>
+        <div className="bg-yellow-50 p-4 rounded border border-yellow-300">
+          <h4 className="font-medium text-gray-800 mb-3">
+            ⚠️ No Other Signers Added
+          </h4>
+          <p className="text-sm text-yellow-700 mb-3">
+            Most contracts require at least two parties. Add a second signer
+            below, or proceed to create a single-party contract.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -238,14 +353,14 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+                Email / Wallet Address
               </label>
               <input
-                type="email"
+                type="text"
                 value={newSignerEmail}
                 onChange={(e) => setNewSignerEmail(e.target.value)}
                 className={inputBaseClasses}
-                placeholder="michael.davis@company.com"
+                placeholder="michael.davis@company.com or 0x..."
               />
             </div>
             <div>
@@ -301,16 +416,41 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
         </button>
         <button
           type="button"
-          onClick={onNext}
+          onClick={() => {
+            if (validateAllSigners()) {
+              // Show confirmation for single-party contracts
+              if (otherSigners.length === 0) {
+                const confirmed = confirm(
+                  "⚠️ You're creating a single-party contract with no other signers.\n\n" +
+                    "This means only you will sign this contract. Is this correct?\n\n" +
+                    "Click OK to proceed with single-party contract, or Cancel to add more signers."
+                );
+                if (!confirmed) {
+                  return;
+                }
+              }
+              onNext();
+            } else {
+              alert("Please fix validation errors before proceeding");
+            }
+          }}
           disabled={
             isLoading ||
             !creatorSigner?.name ||
             !creatorSigner?.email ||
             otherSigners.some((s) => !s.name || !s.email)
           }
-          className="bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+          className={`py-3 px-6 rounded-lg font-medium disabled:opacity-50 ${
+            otherSigners.length === 0
+              ? "bg-yellow-600 text-white hover:bg-yellow-700"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
         >
-          {isLoading ? "Creating Contract..." : "Create Contract"}
+          {isLoading
+            ? "Creating Contract..."
+            : otherSigners.length === 0
+            ? "Create Single-Party Contract"
+            : "Create Multi-Party Contract"}
         </button>
       </div>
     </div>

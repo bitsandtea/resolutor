@@ -1,8 +1,9 @@
 import {
- BlockchainDeploymentState,
- DeploymentStepName,
- DeploymentStepStatus,
+  BlockchainDeploymentState,
+  DeploymentStepName,
+  DeploymentStepStatus,
 } from "@/types";
+import Link from "next/link";
 import React from "react";
 import { stepDefinitions } from "./deploymentSteps";
 
@@ -87,8 +88,14 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                           <div key={step.id} className="text-xs mt-1 space-y-1">
                             {step.txHash && (
                               <p className="text-blue-600">
-                                📋 TX: {step.txHash.slice(0, 10)}...
-                                {step.txHash.slice(-8)}
+                                📋 TX:{" "}
+                                <Link
+                                  href={`https://filecoin-testnet.blockscout.com/tx/${step.txHash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {step.txHash.slice(0, 10)}...
+                                </Link>
                               </p>
                             )}
                             {step.contractAddr && (
