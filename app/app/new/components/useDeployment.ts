@@ -49,7 +49,6 @@ export const useDeployment = ({
     DeploymentStepName | "completed" | null
   >(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
   const [canRetry, setCanRetry] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
   const [lastPolledTime, setLastPolledTime] = useState<number>(0);
@@ -58,13 +57,6 @@ export const useDeployment = ({
     useWaitForTransactionReceipt({
       hash: (accessTxHash || flowTxHash || pendingTxHash) as `0x${string}`,
     });
-
-  const addLog = (message: string) => {
-    setLogs((prev) => [
-      ...prev,
-      `${new Date().toLocaleTimeString()}: ${message}`,
-    ]);
-  };
 
   const updateDeploymentStep = async (
     stepName: string,
@@ -119,33 +111,16 @@ export const useDeployment = ({
         if (data.currentState) {
           setDeploymentState(data.currentState);
 
-          // Debug logging for deployment state
-          // console.log("Deployment state updated:", {
-          //   cid: data.currentState.cid,
-          //   processStatus: data.currentState.processStatus,
-          //   currentStep: data.currentState.currentStep,
-          //   nextStep: data.nextStep,
-          //   deploymentSteps: data.currentState.deploymentSteps?.length || 0,
-          // });
-
           // Update current step based on deployment state
           if (data.isComplete) {
-            addLog("🎉 All deployment steps completed successfully!");
             setCurrentStep("completed");
             setIsProcessing(false);
-          } else if (data.nextStep) {
-            addLog(`📋 Next step to execute: ${data.nextStep}`);
           }
         }
 
         if (data.isComplete && !isProcessing) {
           onComplete(data.currentState);
         } else if (data.currentState?.processStatus === "failed") {
-          addLog(
-            `❌ Deployment failed: ${
-              data.currentState.errorDetails || "Unknown error"
-            }`
-          );
           setIsProcessing(false);
           setCanRetry(true);
         }
@@ -156,9 +131,6 @@ export const useDeployment = ({
       }
     } catch (error) {
       console.error("Error checking deployment status:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      addLog(`❌ Error checking status: ${errorMessage}`);
       return null;
     }
   };
@@ -169,10 +141,8 @@ export const useDeployment = ({
 
     const stepDef = stepDefinitions[stepName as keyof typeof stepDefinitions];
     if (!stepDef) {
-      addLog(`⚠️ Skipping internal step: ${stepName}`);
       return;
     }
-    addLog(`${stepDef.icon} Starting: ${stepDef.title}`);
 
     let requestPayload: Record<string, unknown> = {};
 
@@ -181,14 +151,7 @@ export const useDeployment = ({
       if (stepName === "ipfs_upload") {
         const currentStatus = await checkDeploymentStatus(true);
         if (currentStatus?.currentState?.cid) {
-          addLog(
-            `✅ Content already uploaded to IPFS: ${currentStatus.currentState.cid}`
-          );
-          addLog(
-            `🔗 Gateway URL: https://gateway.lighthouse.storage/ipfs/${currentStatus.currentState.cid}`
-          );
           setCurrentStep("filecoin_access_deploy" as DeploymentStepName);
-          addLog(`⏭️ Moving to next step: filecoin_access_deploy`);
           await executeStep("filecoin_access_deploy" as DeploymentStepName);
           return;
         }
@@ -199,8 +162,6 @@ export const useDeployment = ({
           fileName,
           fileType: "contract_unsigned",
         };
-        addLog(`📤 Uploading contract to IPFS via Lighthouse.storage...`);
-        addLog(`📄 Content length: ${contractContent.length} characters`);
 
         response = await fetch("/api/upload-ipfs", {
           method: "POST",
@@ -212,7 +173,6 @@ export const useDeployment = ({
           agreementId,
           stepName: "contract_signing",
         };
-        addLog(`✍️ Signing contract...`);
 
         response = await fetch("/api/sign-contract", {
           method: "POST",
@@ -238,8 +198,6 @@ export const useDeployment = ({
           );
         }
 
-        addLog(`🔐 Creating an AccessControlManager entry on Filecoin...`);
-
         // Mark step as in progress
         await updateDeploymentStep("filecoin_access_deploy", "in_progress");
 
@@ -250,8 +208,6 @@ export const useDeployment = ({
             process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || ""
           );
 
-          addLog(`📋 Transaction submitted`);
-          addLog(`⏳ Waiting for confirmation...`);
           return { success: true, txHash: "pending" };
         } catch (walletError) {
           await updateDeploymentStep(
@@ -270,8 +226,6 @@ export const useDeployment = ({
           );
         }
 
-        addLog(`⚡ Creating MultiSigAgreement contract via wallet...`);
-
         const currentState = await checkDeploymentStatus(true);
         if (!currentState?.currentState?.cid) {
           throw new Error(
@@ -288,8 +242,6 @@ export const useDeployment = ({
             manifestCid: currentState.currentState.cid,
           });
 
-          addLog(`📋 Transaction submitted`);
-          addLog(`⏳ Waiting for confirmation...`);
           setPendingTxHash("flow_deploy"); // Set a placeholder for tracking
           return { success: true, txHash: "pending", contractAddr: "pending" };
         } catch (walletError) {
@@ -311,27 +263,12 @@ export const useDeployment = ({
       const result = await response.json();
 
       if (result.success) {
-        addLog(`✅ Completed: ${stepDef.title}`);
-
-        if (stepName === "ipfs_upload" && result.cid) {
-          addLog(`🗂️ IPFS CID: ${result.cid}`);
-          addLog(
-            `🔗 Gateway URL: https://gateway.lighthouse.storage/ipfs/${result.cid}`
-          );
-        }
-
-        if (result.txHash) {
-          addLog(`📋 Transaction Hash: ${result.txHash}`);
-        }
-
         await checkDeploymentStatus(true);
 
         if (result.nextStep && result.nextStep !== "completed") {
-          addLog(`⏭️ Proceeding to next step: ${result.nextStep}`);
           await new Promise((resolve) => setTimeout(resolve, 2000));
           await executeStep(result.nextStep as DeploymentStepName);
         } else {
-          addLog("🎉 All deployment steps completed successfully!");
           setCurrentStep("completed");
           setIsProcessing(false);
           const finalStatus = await checkDeploymentStatus(true);
@@ -345,8 +282,6 @@ export const useDeployment = ({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      addLog(`❌ Failed: ${stepDef.title} - ${errorMessage}`);
-      addLog(`🔍 Request payload: ${JSON.stringify(requestPayload, null, 2)}`);
       setIsProcessing(false);
       setCanRetry(true);
       onError(`Deployment failed at ${stepDef.title}: ${errorMessage}`);
@@ -360,17 +295,10 @@ export const useDeployment = ({
         : !contractContent
         ? "Contract content"
         : "File name";
-      addLog(`❌ No ${missing.toLowerCase()} provided`);
       onError(`${missing} is required for deployment`);
       return;
     }
 
-    addLog("🚀 Starting blockchain deployment process...");
-    addLog(`📋 Agreement ID: ${agreementId}`);
-    addLog(`📄 Contract file: ${fileName}`);
-    addLog(`📏 Content size: ${contractContent.length} characters`);
-
-    setLogs([]);
     setIsProcessing(true);
     setCanRetry(false);
 
@@ -378,7 +306,6 @@ export const useDeployment = ({
       const status = await checkDeploymentStatus();
 
       if (status && status.isComplete) {
-        addLog("✅ Deployment already completed!");
         setIsProcessing(false);
         onComplete(status.currentState);
         return;
@@ -386,35 +313,23 @@ export const useDeployment = ({
 
       // Check for existing CID to avoid duplicate uploads
       if (status?.currentState?.cid) {
-        addLog(`📁 Content already exists in IPFS: ${status.currentState.cid}`);
-        addLog(
-          `🔗 Gateway URL: https://gateway.lighthouse.storage/ipfs/${status.currentState.cid}`
-        );
-
         // Skip IPFS upload and proceed to next step
         if (status.nextStep && status.nextStep !== "ipfs_upload") {
-          addLog(`🔄 Resuming deployment from step: ${status.nextStep}`);
           await executeStep(status.nextStep as DeploymentStepName);
         } else {
-          addLog(
-            `⏭️ Skipping IPFS upload, proceeding to access control deploy...`
-          );
           await executeStep("filecoin_access_deploy");
         }
         return;
       }
 
       if (status && status.nextStep) {
-        addLog(`🔄 Resuming deployment from step: ${status.nextStep}`);
         await executeStep(status.nextStep as DeploymentStepName);
       } else {
-        addLog("📤 Starting with IPFS upload...");
         await executeStep("ipfs_upload");
       }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      addLog(`❌ Failed to start deployment: ${errorMessage}`);
       setIsProcessing(false);
       setCanRetry(true);
       onError(`Failed to start deployment: ${errorMessage}`);
@@ -423,18 +338,14 @@ export const useDeployment = ({
 
   const executeNextPendingStep = async () => {
     if (!isConnected) {
-      addLog("❌ Wallet not connected");
       onError("Please connect your wallet first");
       return;
     }
 
     try {
-      addLog("🔍 Checking deployment status...");
       const status = await checkDeploymentStatus();
 
       if (status && status.nextStep) {
-        addLog(`🚀 Executing next step: ${status.nextStep}`);
-
         if (status.currentState?.deploymentSteps) {
           const existingStep = status.currentState.deploymentSteps.find(
             (step: any) =>
@@ -442,8 +353,6 @@ export const useDeployment = ({
           );
 
           if (existingStep) {
-            addLog(`⚠️ Step ${status.nextStep} already completed, skipping...`);
-
             const nextIncompleteStep = stepOrder.find((step) => {
               const stepData = status.currentState.deploymentSteps.find(
                 (s: any) => s.stepName === step
@@ -452,12 +361,8 @@ export const useDeployment = ({
             });
 
             if (nextIncompleteStep) {
-              addLog(
-                `➡️ Moving to next incomplete step: ${nextIncompleteStep}`
-              );
               await executeStep(nextIncompleteStep as DeploymentStepName);
             } else {
-              addLog("🎉 All steps completed!");
               setCurrentStep("completed");
               setIsProcessing(false);
               onComplete(status.currentState);
@@ -468,16 +373,13 @@ export const useDeployment = ({
 
         await executeStep(status.nextStep as DeploymentStepName);
       } else if (status && status.isComplete) {
-        addLog("✅ All steps already completed!");
         onComplete(status.currentState);
       } else {
-        addLog("🔄 Starting deployment from beginning...");
         await startDeployment();
       }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      addLog(`❌ Failed to execute next step: ${errorMessage}`);
       console.error("Execute next step error:", error);
       onError(`Failed to execute next step: ${errorMessage}`);
     }
@@ -485,8 +387,6 @@ export const useDeployment = ({
 
   const retryDeployment = async () => {
     try {
-      addLog("🔄 Attempting to retry deployment...");
-
       const response = await fetch("/api/deployment-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -498,7 +398,6 @@ export const useDeployment = ({
 
       const result = await response.json();
       if (result.success) {
-        addLog(`✅ Deployment resumed. Next step: ${result.nextStep}`);
         await executeStep(result.nextStep as DeploymentStepName);
       } else {
         throw new Error(result.error);
@@ -506,15 +405,12 @@ export const useDeployment = ({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      addLog(`❌ Retry failed: ${errorMessage}`);
       onError(`Retry failed: ${errorMessage}`);
     }
   };
 
   const resetDeployment = async () => {
     try {
-      addLog("🔄 Resetting deployment...");
-
       const response = await fetch("/api/deployment-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -526,8 +422,6 @@ export const useDeployment = ({
 
       const result = await response.json();
       if (result.success) {
-        addLog("✅ Deployment reset. Starting fresh...");
-        setLogs([]);
         await startDeployment();
       } else {
         throw new Error(result.error);
@@ -535,7 +429,6 @@ export const useDeployment = ({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      addLog(`❌ Reset failed: ${errorMessage}`);
       onError(`Reset failed: ${errorMessage}`);
     }
   };
@@ -610,10 +503,6 @@ export const useDeployment = ({
   // Handle when access control transaction hash becomes available
   useEffect(() => {
     if (accessTxHash && currentStep === "filecoin_access_deploy") {
-      addLog(`📋 Transaction hash received: ${accessTxHash}`);
-      addLog(
-        `🔗 View on Filecoin Explorer: https://calibration.filfox.info/en/message/${accessTxHash}`
-      );
       updateDeploymentStep(
         "filecoin_access_deploy",
         "in_progress",
@@ -625,10 +514,6 @@ export const useDeployment = ({
   // Handle when flow transaction hash becomes available
   useEffect(() => {
     if (flowTxHash && currentStep === "flow_deploy") {
-      addLog(`📋 Flow transaction hash received: ${flowTxHash}`);
-      addLog(
-        `🔗 View on Flow Explorer: https://evm-testnet.flowscan.io/tx/${flowTxHash}`
-      );
       updateDeploymentStep("flow_deploy", "in_progress", flowTxHash);
     }
   }, [flowTxHash, currentStep]);
@@ -640,9 +525,6 @@ export const useDeployment = ({
       accessTxHash &&
       currentStep === "filecoin_access_deploy"
     ) {
-      addLog(`✅ Access Control transaction confirmed!`);
-      addLog(`✅ Completed: Deploy Access Control`);
-
       // Update step as completed
       updateDeploymentStep("filecoin_access_deploy", "completed", accessTxHash);
 
@@ -654,28 +536,15 @@ export const useDeployment = ({
           updatedStatus?.nextStep &&
           updatedStatus.nextStep !== "filecoin_access_deploy"
         ) {
-          addLog(
-            formatTxLogMessage(
-              "⏭️ Proceeding to next step",
-              updatedStatus.nextStep
-            )
-          );
           setTimeout(() => {
             executeStep(updatedStatus.nextStep as DeploymentStepName);
           }, 1000);
         } else if (updatedStatus?.isComplete) {
-          addLog(
-            formatTxLogMessage(
-              "🎉 All deployment steps completed successfully!",
-              updatedStatus.currentState.cid
-            )
-          );
           setCurrentStep("completed");
           setIsProcessing(false);
           onComplete(updatedStatus.currentState);
         } else {
           // Fallback: proceed to flow deployment
-          addLog(formatTxLogMessage("⏭️ Moving to next step", "flow_deploy"));
           setTimeout(() => {
             executeStep("flow_deploy");
           }, 1000);
@@ -687,12 +556,6 @@ export const useDeployment = ({
   // Handle access control errors
   useEffect(() => {
     if (accessError && currentStep === "filecoin_access_deploy") {
-      addLog(
-        formatTxLogMessage(
-          "❌ Access Control deployment failed",
-          accessError.message
-        )
-      );
       updateDeploymentStep(
         "filecoin_access_deploy",
         "failed",
@@ -712,16 +575,6 @@ export const useDeployment = ({
     if (currentStep === "flow_deploy" && pendingTxHash === "flow_deploy") {
       if (!isCreatingAgreement && !createError) {
         // Flow agreement creation completed successfully
-        addLog(
-          formatTxLogMessage(
-            "✅ Flow Agreement deployment completed successfully!",
-            flowTxHash
-          )
-        );
-        addLog(
-          formatTxLogMessage("✅ Completed: Deploy Flow Contract", flowTxHash)
-        );
-
         // Clear pending state
         setPendingTxHash(null);
 
@@ -730,35 +583,17 @@ export const useDeployment = ({
           const updatedStatus = await checkDeploymentStatus(true);
 
           if (updatedStatus?.isComplete) {
-            addLog(
-              formatTxLogMessage(
-                "🎉 All deployment steps completed successfully!",
-                updatedStatus.currentState.cid
-              )
-            );
             setCurrentStep("completed");
             setIsProcessing(false);
             onComplete(updatedStatus.currentState);
           } else {
             // Mark as completed manually if backend hasn't updated yet
-            addLog(
-              formatTxLogMessage(
-                "🎉 All deployment steps completed successfully!",
-                updatedStatus.currentState.cid
-              )
-            );
             setCurrentStep("completed");
             setIsProcessing(false);
           }
         }, 2000);
       } else if (!isCreatingAgreement && createError) {
         // Flow agreement creation failed
-        addLog(
-          formatTxLogMessage(
-            "❌ Flow Agreement deployment failed",
-            createError.message
-          )
-        );
         setPendingTxHash(null);
         setIsProcessing(false);
         setCanRetry(true);
@@ -779,22 +614,9 @@ export const useDeployment = ({
         if (status?.currentState) {
           const stepStatus = getStepStatus(currentStep as DeploymentStepName);
           if (stepStatus === "completed" && isProcessing) {
-            addLog(
-              formatTxLogMessage("✅ Step completed on backend", currentStep)
-            );
-
             if (status.nextStep && status.nextStep !== "completed") {
-              addLog(
-                formatTxLogMessage("⏭️ Moving to next step", status.nextStep)
-              );
               setCurrentStep(status.nextStep);
             } else if (status.isComplete) {
-              addLog(
-                formatTxLogMessage(
-                  "🎉 All deployment steps completed!",
-                  status.currentState.cid
-                )
-              );
               setCurrentStep("completed");
               setIsProcessing(false);
               onComplete(status.currentState);
@@ -813,43 +635,13 @@ export const useDeployment = ({
   useEffect(() => {
     if (agreementId) {
       const initializeDeploymentState = async () => {
-        addLog("🔍 Checking existing deployment status...");
         const status = await checkDeploymentStatus(true);
 
         if (status?.currentState) {
-          // If we have a CID already, log it and mark IPFS as completed
-          if (status.currentState.cid) {
-            addLog(
-              formatTxLogMessage(
-                "📁 Found existing IPFS upload",
-                status.currentState.cid
-              )
-            );
-            addLog(
-              formatTxLogMessage(
-                "🔗 Gateway URL",
-                `https://gateway.lighthouse.storage/ipfs/${status.currentState.cid}`
-              )
-            );
-            addLog(
-              formatTxLogMessage(
-                "✅ IPFS Upload step already completed",
-                status.currentState.cid
-              )
-            );
-          }
-
           // Set the current step based on what's next
           if (status.nextStep) {
-            addLog(formatTxLogMessage("📋 Next pending step", status.nextStep));
             setCurrentStep(status.nextStep as DeploymentStepName);
           } else if (status.isComplete) {
-            addLog(
-              formatTxLogMessage(
-                "🎉 All deployment steps already completed!",
-                status.currentState.cid
-              )
-            );
             setCurrentStep("completed");
             onComplete(status.currentState);
           }
@@ -864,7 +656,6 @@ export const useDeployment = ({
     deploymentState,
     currentStep,
     isProcessing,
-    logs,
     canRetry,
     pendingTxHash,
     isTxPending,

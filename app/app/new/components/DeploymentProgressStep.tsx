@@ -33,7 +33,6 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
     deploymentState,
     currentStep,
     isProcessing,
-    logs,
     canRetry,
     pendingTxHash,
     isTxPending,
@@ -93,8 +92,6 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
         isProcessing={isProcessing}
         getStepStatus={getStepStatus}
       />
-
-      {/* <DeploymentLogs logs={logs} /> */}
 
       <div className="flex justify-center pt-4">
         <button

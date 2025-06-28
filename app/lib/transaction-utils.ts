@@ -26,18 +26,6 @@ export const getExplorerUrl = (
 };
 
 /**
- * Generate a formatted log message with transaction hash and explorer link
- */
-export const formatTxLogMessage = (
-  txHash: string,
-  network: SupportedNetwork
-): string => {
-  const config = EXPLORER_CONFIGS[network];
-  const explorerUrl = getExplorerUrl(txHash, network);
-  return `📋 Transaction: ${txHash}\n🔗 View on ${config.name}: ${explorerUrl}`;
-};
-
-/**
  * Get short display format for transaction hash (first 8 + last 6 characters)
  */
 export const formatTxHashShort = (txHash: string): string => {
