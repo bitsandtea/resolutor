@@ -8,7 +8,9 @@
     "test": "hardhat test",
     "coverage": "hardhat coverage",
     "deploy": "hardhat run scripts/deploy.ts",
-    "verify": "hardhat verify"
+    "deploy:access-control": "hardhat run scripts/deployAndVerifyAccessControl.ts --network filecoinCalibration",
+    "verify": "hardhat verify",
+    "verify:access-control": "hardhat run scripts/verify/verifyAccessControl.ts --network filecoinCalibration"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",

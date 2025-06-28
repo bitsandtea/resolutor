@@ -58,7 +58,7 @@ const config: HardhatUserConfig = {
         chainId: 314159,
         urls: {
           apiURL: "https://filecoin-testnet.blockscout.com/api",
-          browserURL: "https://filecoin-testnet.blockscout.com/",
+          browserURL: "https://filecoin-testnet.blockscout.com",
         },
       },
     ],
