@@ -936,16 +936,6 @@ Powered by Resolutor`;
                     </p>
                   </div>
                 )}
-                {deploymentState?.filecoinStorageManager && (
-                  <div>
-                    <span className="font-medium text-gray-700">
-                      Filecoin Storage:
-                    </span>
-                    <p className="text-gray-600 font-mono text-xs">
-                      {deploymentState.filecoinStorageManager}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
 

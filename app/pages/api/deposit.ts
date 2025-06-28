@@ -17,7 +17,8 @@ interface DepositResponse {
 }
 
 const MOCK_ERC20_ADDRESS = process.env.MOCK_ERC20_ADDRESS || "";
-const ESCROW_CONTRACT_ADDRESS = process.env.ESCROW_CONTRACT_ADDRESS || "";
+const NEXT_PUBLIC_MULTISIG_ADDRESS =
+  process.env.NEXT_PUBLIC_MULTISIG_ADDRESS || "";
 
 export default async function handler(
   req: NextApiRequest,
@@ -59,7 +60,7 @@ export default async function handler(
     // Generate ERC20 transfer transaction to escrow contract
     const tx = generateDepositTransaction(
       MOCK_ERC20_ADDRESS,
-      ESCROW_CONTRACT_ADDRESS,
+      NEXT_PUBLIC_MULTISIG_ADDRESS,
       depositAmount
     );
 

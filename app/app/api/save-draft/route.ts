@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
         cid: agreement.cid,
         processStatus: agreement.processStatus,
         flowContractAddr: agreement.flowContractAddr,
-        filecoinStorageManager: agreement.filecoinStorageManager,
+
         filecoinAccessControl: agreement.filecoinAccessControl,
       },
     });

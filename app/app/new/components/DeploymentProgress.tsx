@@ -90,7 +90,11 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                               <p className="text-blue-600">
                                 📋 TX:{" "}
                                 <Link
-                                  href={`https://filecoin-testnet.blockscout.com/tx/${step.txHash}`}
+                                  href={`${
+                                    step.stepName === "flow_deploy"
+                                      ? "https://evm-testnet.flowscan.io"
+                                      : "https://filecoin-testnet.blockscout.com"
+                                  }/tx/${step.txHash}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >

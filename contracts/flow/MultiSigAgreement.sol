@@ -33,7 +33,6 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         uint256 depositA;
         uint256 depositB;
         Status status;
-        address filecoinStorageManager;  // Reference to Filecoin StorageManager
         address filecoinAccessControl;   // Reference to Filecoin AccessControl
         bool partyAApproved;
         bool partyBApproved;
@@ -93,15 +92,12 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         uint256 _depositA,
         uint256 _depositB,
         address _token,
-        address _filecoinStorageManager,
         address _filecoinAccessControl
     ) external initializer {
         require(_partyA != address(0) && _mediator != address(0), "Invalid addresses");
         require(_partyA != _mediator, "Party A and mediator must be different");
-        require(_depositA > 0 && _depositB > 0, "Deposits must be positive");
         require(_depositA <= MAX_DEPOSIT && _depositB <= MAX_DEPOSIT, "Deposit exceeds maximum");
         require(_token != address(0), "Invalid token address");
-        require(_filecoinStorageManager != address(0), "Invalid storage manager address");
         require(_filecoinAccessControl != address(0), "Invalid access control address");
 
         agreement.partyA = _partyA;
@@ -110,7 +106,6 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         agreement.depositA = _depositA;
         agreement.depositB = _depositB;
         agreement.status = Status.Created;
-        agreement.filecoinStorageManager = _filecoinStorageManager;
         agreement.filecoinAccessControl = _filecoinAccessControl;
         agreement.partyAApproved = false;
         agreement.partyBApproved = false;
@@ -248,7 +243,6 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         uint256 depositA,
         uint256 depositB,
         Status status,
-        address filecoinStorageManager,
         address filecoinAccessControl,
         uint256 propAmountToA,
         uint256 propAmountToB,
@@ -263,7 +257,6 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
             agreement.depositA,
             agreement.depositB,
             agreement.status,
-            agreement.filecoinStorageManager,
             agreement.filecoinAccessControl,
             currentProp.amountToA,
             currentProp.amountToB,

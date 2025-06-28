@@ -27,17 +27,6 @@ export const AgreementFactoryABI = [
     type: "error",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "token",
-        type: "address",
-      },
-    ],
-    name: "SafeERC20FailedOperation",
-    type: "error",
-  },
-  {
     anonymous: false,
     inputs: [
       {
@@ -50,12 +39,6 @@ export const AgreementFactoryABI = [
         indexed: true,
         internalType: "address",
         name: "partyA",
-        type: "address",
-      },
-      {
-        indexed: true,
-        internalType: "address",
-        name: "partyB",
         type: "address",
       },
     ],
@@ -103,11 +86,6 @@ export const AgreementFactoryABI = [
       },
       {
         internalType: "address",
-        name: "_partyB",
-        type: "address",
-      },
-      {
-        internalType: "address",
         name: "_mediator",
         type: "address",
       },
@@ -127,9 +105,9 @@ export const AgreementFactoryABI = [
         type: "address",
       },
       {
-        internalType: "string",
-        name: "_manifestCid",
-        type: "string",
+        internalType: "address",
+        name: "_filecoinAccessControl",
+        type: "address",
       },
     ],
     name: "createAgreement",
@@ -667,12 +645,6 @@ export const MultiSigAgreementABI = [
         name: "partyA",
         type: "address",
       },
-      {
-        indexed: true,
-        internalType: "address",
-        name: "partyB",
-        type: "address",
-      },
     ],
     name: "AgreementCreated",
     type: "event",
@@ -683,17 +655,36 @@ export const MultiSigAgreementABI = [
       {
         indexed: true,
         internalType: "address",
-        name: "from",
+        name: "partyB",
         type: "address",
+      },
+    ],
+    name: "ContractSigned",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [],
+    name: "DepositsReady",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: false,
+        internalType: "uint256",
+        name: "amountA",
+        type: "uint256",
       },
       {
         indexed: false,
         internalType: "uint256",
-        name: "amount",
+        name: "amountB",
         type: "uint256",
       },
     ],
-    name: "Deposited",
+    name: "DepositsTaken",
     type: "event",
   },
   {
@@ -704,12 +695,6 @@ export const MultiSigAgreementABI = [
         internalType: "address",
         name: "opener",
         type: "address",
-      },
-      {
-        indexed: false,
-        internalType: "string",
-        name: "evidenceCid",
-        type: "string",
       },
     ],
     name: "DisputeOpened",
@@ -726,6 +711,19 @@ export const MultiSigAgreementABI = [
       },
     ],
     name: "Initialized",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "party",
+        type: "address",
+      },
+    ],
+    name: "PartyApproved",
     type: "event",
   },
   {
@@ -840,12 +838,29 @@ export const MultiSigAgreementABI = [
         type: "uint8",
       },
       {
-        internalType: "string",
-        name: "manifestCid",
-        type: "string",
+        internalType: "address",
+        name: "filecoinAccessControl",
+        type: "address",
+      },
+      {
+        internalType: "bool",
+        name: "partyAApproved",
+        type: "bool",
+      },
+      {
+        internalType: "bool",
+        name: "partyBApproved",
+        type: "bool",
       },
     ],
     stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "approveDeposit",
+    outputs: [],
+    stateMutability: "nonpayable",
     type: "function",
   },
   {
@@ -883,24 +898,12 @@ export const MultiSigAgreementABI = [
         type: "uint256",
       },
       {
-        internalType: "string",
-        name: "proposalCid",
-        type: "string",
-      },
-      {
         internalType: "uint8",
         name: "approvalCount",
         type: "uint8",
       },
     ],
     stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "depositByPartyB",
-    outputs: [],
-    stateMutability: "nonpayable",
     type: "function",
   },
   {
@@ -938,14 +941,9 @@ export const MultiSigAgreementABI = [
         type: "uint8",
       },
       {
-        internalType: "string",
-        name: "manifestCid",
-        type: "string",
-      },
-      {
-        internalType: "string[]",
-        name: "evidenceCids",
-        type: "string[]",
+        internalType: "address",
+        name: "filecoinAccessControl",
+        type: "address",
       },
       {
         internalType: "uint256",
@@ -958,14 +956,19 @@ export const MultiSigAgreementABI = [
         type: "uint256",
       },
       {
-        internalType: "string",
-        name: "proposalCid",
-        type: "string",
-      },
-      {
         internalType: "uint8",
         name: "approvalCount",
         type: "uint8",
+      },
+      {
+        internalType: "bool",
+        name: "partyAApproved",
+        type: "bool",
+      },
+      {
+        internalType: "bool",
+        name: "partyBApproved",
+        type: "bool",
       },
     ],
     stateMutability: "view",
@@ -976,11 +979,6 @@ export const MultiSigAgreementABI = [
       {
         internalType: "address",
         name: "_partyA",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_partyB",
         type: "address",
       },
       {
@@ -1004,9 +1002,9 @@ export const MultiSigAgreementABI = [
         type: "address",
       },
       {
-        internalType: "string",
-        name: "_manifestCid",
-        type: "string",
+        internalType: "address",
+        name: "_filecoinAccessControl",
+        type: "address",
       },
     ],
     name: "initialize",
@@ -1015,13 +1013,7 @@ export const MultiSigAgreementABI = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "string",
-        name: "evidenceCid",
-        type: "string",
-      },
-    ],
+    inputs: [],
     name: "openDispute",
     outputs: [],
     stateMutability: "nonpayable",
@@ -1039,11 +1031,6 @@ export const MultiSigAgreementABI = [
         name: "amountToB",
         type: "uint256",
       },
-      {
-        internalType: "string",
-        name: "proposalCid",
-        type: "string",
-      },
     ],
     name: "proposeResolution",
     outputs: [],
@@ -1053,6 +1040,20 @@ export const MultiSigAgreementABI = [
   {
     inputs: [],
     name: "refundExpired",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "signContract",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "takeDeposits",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
@@ -1072,8 +1073,6 @@ export const MultiSigAgreementABI = [
   },
 ];
 
-// ## Filecoin ABI's
-
 export const AccessControlABI = [
   {
     anonymous: false,
@@ -1088,12 +1087,6 @@ export const AccessControlABI = [
         indexed: true,
         internalType: "address",
         name: "partyA",
-        type: "address",
-      },
-      {
-        indexed: false,
-        internalType: "address",
-        name: "flowContract",
         type: "address",
       },
     ],
@@ -1225,11 +1218,6 @@ export const AccessControlABI = [
         type: "bool",
       },
       {
-        internalType: "address",
-        name: "flowContractAddr",
-        type: "address",
-      },
-      {
         internalType: "uint256",
         name: "createdAt",
         type: "uint256",
@@ -1318,11 +1306,6 @@ export const AccessControlABI = [
       {
         internalType: "address",
         name: "mediator",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "flowContractAddr",
         type: "address",
       },
       {

@@ -9,7 +9,7 @@ import { HardhatUserConfig } from "hardhat/config";
 
 const config: HardhatUserConfig = {
   paths: {
-    sources: "./filecoin",
+    sources: "./flow",
     cache: "./cache",
     artifacts: "./artifacts",
   },

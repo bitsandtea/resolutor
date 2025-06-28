@@ -33,9 +33,7 @@ model Agreement {
   flowFactoryTx    String? // Transaction hash of factory creation
   
   // Filecoin contract references  
-  filecoinStorageManager String? // Address of Filecoin StorageManager
   filecoinAccessControl  String? // Address of Filecoin AccessControl
-  filecoinStorageTx      String? // Transaction hash of storage creation
   filecoinAccessTx       String? // Transaction hash of access control creation
   
   // Process tracking

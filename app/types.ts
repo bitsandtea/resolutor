@@ -165,12 +165,10 @@ export interface BlockchainDeploymentState {
 
   // Contract addresses
   flowContractAddr?: string;
-  filecoinStorageManager?: string;
   filecoinAccessControl?: string;
 
   // Transaction hashes
   flowFactoryTx?: string;
-  filecoinStorageTx?: string;
   filecoinAccessTx?: string;
 
   // IPFS data
@@ -238,7 +236,6 @@ export interface NetworkConfig {
   rpcUrl: string;
   explorerUrl?: string;
   factoryAddr?: string;
-  storageManager?: string;
   tokenAddr?: string;
   isActive: boolean;
 }

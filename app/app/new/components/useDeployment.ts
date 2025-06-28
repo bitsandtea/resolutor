@@ -10,7 +10,7 @@ import { parseEther } from "viem";
 import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
 import { stepDefinitions, stepOrder } from "./deploymentSteps";
 
-import { config } from "@/lib/wagmi";
+import { config, CONTRACT_ADDRESSES } from "@/lib/wagmi";
 import { switchChain } from "@wagmi/core";
 
 interface UseDeploymentProps {
@@ -236,10 +236,14 @@ export const useDeployment = ({
         try {
           await createAgreement({
             partyA: address,
-            partyB: "0x0000000000000000000000000000000000000000",
+            mediator:
+              (process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS as `0x${string}`) || "",
             depositA: parseEther("0.1"),
             depositB: parseEther("0.1"),
-            manifestCid: currentState.currentState.cid,
+            token: CONTRACT_ADDRESSES.MOCK_ERC20,
+            filecoinAccessControl:
+              (process.env
+                .NEXT_PUBLIC_FILECOIN_ACCESS_CONTROL as `0x${string}`) || "",
           });
 
           setPendingTxHash("flow_deploy"); // Set a placeholder for tracking

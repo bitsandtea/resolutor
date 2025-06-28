@@ -139,7 +139,7 @@ export interface BlockchainDeploymentState {
 
   // Contract addresses
   flowContractAddr?: string;
-  filecoinStorageManager?: string;
+
   filecoinAccessControl?: string;
 
   // Transaction hashes

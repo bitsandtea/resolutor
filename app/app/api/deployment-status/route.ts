@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
 
       // Contract addresses
       flowContractAddr: agreement.flowContractAddr,
-      filecoinStorageManager: agreement.filecoinStorageManager,
       filecoinAccessControl: agreement.filecoinAccessControl,
 
       // Transaction hashes
@@ -233,7 +232,7 @@ async function resetDeployment(agreementId: string) {
       processStatus: "db_saved",
       currentStep: "ipfs_upload",
       flowContractAddr: null,
-      filecoinStorageManager: null,
+
       filecoinAccessControl: null,
       flowFactoryTx: null,
       filecoinStorageTx: null,

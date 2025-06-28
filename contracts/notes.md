@@ -4,9 +4,9 @@
 
 ## FLOW:
 
-- AgreementFactory deployed to: 0xCa80443A8112a69C80BCA99f1033D33bD5a6c4aB
-- MultiSigAgreement deployed to: 0x903eEB8b973F481C2CC1B134A426B11B097A2c19
-- Mock USDC deployed to: 0xaD3A781d4bd2a6674E42357a15E674bC25B0FE94
+Factory address: 0xFBFDE5Fdc33F4adf31B16D758f5F61B5D5163aB5
+Implementation address: 0x03F1E5a5B51A0504a9A30E497d93DCF9219b631B
+Mock USDC deployed to: 0x43aB8084f05f492153D5758C8aA96ad0A414C3DC
 
 ## FileCoin:
 
@@ -99,3 +99,44 @@ AccessControl.sol: 0xcD4A59768a4C5cD82A75E7074be80C2Adb68F918
 
 - Flow: minimize storage, optimize for frequent operations
 - Filecoin: batch storage operations, efficient access control checks
+
+## Deployment Flow
+
+### Step 1: IPFS Upload
+
+1. **Frontend**: Upload contract content to IPFS via Lighthouse
+2. **Backend**: Store IPFS CID in database
+
+### Step 2: Filecoin Access Control Deployment
+
+1. **Backend**: Deploy `AccessControl.sol` contract on Filecoin
+2. **Backend**: Call `AccessControl.createAgreement(agreementId, partyA, mediator)`
+3. **Backend**: Call `AccessControl.storeFile(ipfsCid, agreementId)` to link the IPFS content
+
+### Step 3: Flow Contract Deployment
+
+1. **Backend**: Deploy agreement via `FlowAgreementFactory.createAgreement(partyA, mediator, depositA, depositB, token, filecoinAccessControl)`
+2. **Backend**: Store Flow contract address in database
+
+### Step 4: Contract Signing
+
+1. **Frontend**: Party B signs the contract
+2. **Backend**: Update signed content to IPFS
+3. **Backend**: Call `AccessControl.setPartyB(agreementId, partyB)`
+4. **Backend**: Call `AccessControl.storeFile(signedCid, agreementId)` for signed version
+
+## Active Agreement Flow
+
+### Deposit Phase
+
+1. **Frontend**: Parties approve tokens and call `approveDeposit()`
+2. **Backend**: Once both approved, call `takeDeposits()`
+3. **Backend**: Update access control: `AccessControl.addViewer(agreementId, authorizedUser)` if needed
+
+### Dispute Phase
+
+1. **Frontend**: Party opens dispute via `openDispute()`
+2. **Backend**: For each evidence file, call `AccessControl.storeFile(evidenceCid, agreementId)`
+3. **Backend**: Mediator AI analyzes evidence
+4. **Backend**: Store AI analysis: `AccessControl.storeFile(aiAnalysisCid, agreementId)`
+5. **Backend**: Execute resolution via Flow contract

@@ -11,6 +11,10 @@ contract MockERC20 is ERC20, Ownable {
         _mint(to, amount);
     }
 
+    function mintToSelf() external {
+        _mint(msg.sender, 100_000_000 * 10**18); // 100 million tokens
+    }
+
     function decimals() public view virtual override returns (uint8) {
         return 18;
     }
