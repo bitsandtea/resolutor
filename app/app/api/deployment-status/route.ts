@@ -45,8 +45,6 @@ export async function GET(request: NextRequest) {
 
       // Transaction hashes
       flowFactoryTx: agreement.flowFactoryTx,
-      filecoinStorageTx: agreement.filecoinStorageTx,
-      filecoinAccessTx: agreement.filecoinAccessTx,
 
       // IPFS data
       cid: agreement.cid,
@@ -81,7 +79,15 @@ export async function GET(request: NextRequest) {
     } else if (agreement.processStatus === "ipfs_uploaded") {
       nextStep = "filecoin_access_deploy";
     } else if (agreement.processStatus === "filecoin_deployed") {
-      nextStep = "flow_deploy";
+      // Check if filecoin_store_file is completed
+      const storeFileStep = agreement.deploymentSteps.find(
+        (step) => step.stepName === "filecoin_store_file"
+      );
+      if (!storeFileStep || storeFileStep.status !== "completed") {
+        nextStep = "filecoin_store_file";
+      } else {
+        nextStep = "flow_deploy";
+      }
     } else if (agreement.processStatus === "failed") {
       // Find the last failed step
       const failedStep = agreement.deploymentSteps
@@ -235,8 +241,6 @@ async function resetDeployment(agreementId: string) {
 
       filecoinAccessControl: null,
       flowFactoryTx: null,
-      filecoinStorageTx: null,
-      filecoinAccessTx: null,
       errorDetails: null,
       retryCount: 0,
       lastStepAt: new Date(),

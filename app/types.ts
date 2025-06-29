@@ -128,6 +128,7 @@ export type DeploymentStepName =
   | "ipfs_upload"
   | "contract_signing"
   | "filecoin_access_deploy"
+  | "filecoin_store_file"
   | "flow_deploy";
 
 export type DeploymentStepStatus =

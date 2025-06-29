@@ -74,6 +74,15 @@ export async function GET(
           depositBPaid: agreement.depositBPaid,
           createdAt: agreement.createdAt,
           flowContractAddr: agreement.flowContractAddr,
+          filecoinAccessControl: agreement.filecoinAccessControl,
+          flowFactoryTx: agreement.flowFactoryTx,
+          processStatus: agreement.processStatus,
+          currentStep: agreement.currentStep,
+          lastStepAt: agreement.lastStepAt,
+          errorDetails: agreement.errorDetails,
+          retryCount: agreement.retryCount,
+          signersData: agreement.signersData,
+
           // Add any other details from the 'agreement' object you want to send to the frontend
         },
         message: "Agreement content retrieved successfully.",

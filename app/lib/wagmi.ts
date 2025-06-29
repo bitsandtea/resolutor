@@ -24,3 +24,5 @@ export const CONTRACT_ADDRESSES = {
 export const MEDIATOR_ADDRESS = process.env
   .NEXT_PUBLIC_MEDIATOR_ADDRESS as `0x${string}`;
 export const FILECOIN_RPC_URL = process.env.FILECOIN_RPC_URL;
+
+export const FLOW_RPC_URL = process.env.NEXT_PUBLIC_FLOW_RPC_URL;

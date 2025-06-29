@@ -9,8 +9,9 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 ```
 1. ipfs_upload           📁 Upload to IPFS
 2. filecoin_access_deploy 🔐 Deploy Access Control
-3. flow_deploy           ⚡ Deploy Flow Contract
-4. contract_signing      ✍️ Sign Contract
+3. filecoin_store_file   💾 Store File on Filecoin
+4. flow_deploy           ⚡ Deploy Flow Contract
+5. contract_signing      ✍️ Sign Contract
 ```
 
 ## Step Details
@@ -79,7 +80,41 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 
 ---
 
-### 3. Flow Deploy (`flow_deploy`) ⚡
+### 3. Filecoin Store File (`filecoin_store_file`) 💾
+
+**Purpose**: Store the contract file in the Filecoin access control contract
+
+**What happens**:
+
+- Requires completed IPFS upload (CID available)
+- Requires completed Filecoin access control deployment
+- Calls `storeFile()` function with IPFS CID and agreement ID
+- Links the contract file to the agreement in the access control system
+- Establishes file storage permissions for authorized parties
+
+**Requirements**:
+
+- Connected wallet (address available)
+- Completed IPFS upload (CID required)
+- Completed Filecoin access control deployment
+- User should be connected to FileCoin Testnet Network which is stored in process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID
+
+**Output**:
+
+- File storage confirmation
+- Transaction hash
+- File-agreement linkage established
+
+**Error handling**:
+
+- Missing CID: blocks execution with clear error
+- Wallet not connected: throws connection error
+- Transaction failure: provides retry mechanism
+- Network issues: automatic retry with backoff
+
+---
+
+### 4. Flow Deploy (`flow_deploy`) ⚡
 
 **Purpose**: Deploy the main MultiSigAgreement contract on Flow blockchain
 
@@ -96,7 +131,30 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 
 **Requirements**: User should be connected to Flow Network which is stored in process.env.NEXT_PUBLIC_FLOW_EVM_TESTNET_CHAIN_ID
 
-### 2. Contract Signing (`contract_signing`) ✍️
+**Requirements**:
+
+- Connected wallet
+- Completed IPFS upload (CID required)
+- Sufficient gas/fees for contract deployment
+- Flow network connectivity
+
+**Output**:
+
+- Flow contract address
+- Transaction hash
+- Multi-signature agreement established
+- Escrow deposits locked
+
+**Error handling**:
+
+- Missing CID: blocks execution with clear error
+- Wallet errors: retry mechanism with user guidance
+- Insufficient funds: clear error message
+- Network congestion: automatic retry
+
+---
+
+### 5. Contract Signing (`contract_signing`) ✍️
 
 **Purpose**: Digitally sign the contract content before blockchain deployment
 
@@ -126,27 +184,6 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 - Signature failure retries with user notification
 
 ---
-
-**Requirements**:
-
-- Connected wallet
-- Completed IPFS upload (CID required)
-- Sufficient gas/fees for contract deployment
-- Flow network connectivity
-
-**Output**:
-
-- Flow contract address
-- Transaction hash
-- Multi-signature agreement established
-- Escrow deposits locked
-
-**Error handling**:
-
-- Missing CID: blocks execution with clear error
-- Wallet errors: retry mechanism with user guidance
-- Insufficient funds: clear error message
-- Network congestion: automatic retry
 
 ## State Management
 
@@ -180,6 +217,7 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 
 ### Dependencies
 
+- Filecoin store file requires IPFS CID and access control deployment
 - Flow contract requires IPFS CID
 - Access control links to agreement participants
 - All systems reference common agreement ID

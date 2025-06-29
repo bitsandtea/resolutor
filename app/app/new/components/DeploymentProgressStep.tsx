@@ -46,6 +46,7 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
     resetDeployment,
     getStepStatus,
     getNextPendingStep,
+    retryStep,
   } = useDeployment({
     agreementId,
     contractContent,
@@ -91,6 +92,7 @@ const DeploymentProgressStep: React.FC<DeploymentProgressStepProps> = ({
         currentStep={currentStep}
         isProcessing={isProcessing}
         getStepStatus={getStepStatus}
+        retryStep={retryStep}
       />
 
       <div className="flex justify-center pt-4">

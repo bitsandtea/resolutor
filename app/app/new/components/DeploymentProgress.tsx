@@ -12,6 +12,7 @@ interface DeploymentProgressProps {
   currentStep: DeploymentStepName | "completed" | null;
   isProcessing: boolean;
   getStepStatus: (stepName: DeploymentStepName) => DeploymentStepStatus;
+  retryStep: (stepName: DeploymentStepName) => Promise<void>;
 }
 
 const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
@@ -19,6 +20,7 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
   currentStep,
   isProcessing,
   getStepStatus,
+  retryStep,
 }) => {
   const renderStepIcon = (stepName: DeploymentStepName) => {
     const status = getStepStatus(stepName);
@@ -37,6 +39,14 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
             {stepDef?.icon || "⚙️"}
           </span>
         );
+    }
+  };
+
+  const handleRetryStep = async (stepName: DeploymentStepName) => {
+    try {
+      await retryStep(stepName);
+    } catch (error) {
+      console.error("Failed to retry step:", error);
     }
   };
 
@@ -62,20 +72,33 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                     <h4 className="font-medium text-gray-800">
                       {stepDef.title}
                     </h4>
-                    <span
-                      className={`text-sm px-2 py-1 rounded ${
-                        status === "completed"
-                          ? "bg-green-100 text-green-800"
-                          : status === "in_progress"
-                          ? "bg-blue-100 text-blue-800"
-                          : status === "failed"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {status.charAt(0).toUpperCase() +
-                        status.slice(1).replace("_", " ")}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span
+                        className={`text-sm px-2 py-1 rounded ${
+                          status === "completed"
+                            ? "bg-green-100 text-green-800"
+                            : status === "in_progress"
+                            ? "bg-blue-100 text-blue-800"
+                            : status === "failed"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {status.charAt(0).toUpperCase() +
+                          status.slice(1).replace("_", " ")}
+                      </span>
+                      {status === "failed" && !isProcessing && (
+                        <button
+                          onClick={() =>
+                            handleRetryStep(stepName as DeploymentStepName)
+                          }
+                          className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                          disabled={isProcessing}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-600">{stepDef.description}</p>
 
@@ -102,18 +125,6 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                                 </Link>
                               </p>
                             )}
-                            {step.contractAddr && (
-                              <p className="text-green-600">
-                                📍 Contract: {step.contractAddr.slice(0, 8)}...
-                                {step.contractAddr.slice(-6)}
-                              </p>
-                            )}
-                            {step.ipfsCid && (
-                              <p className="text-purple-600">
-                                🗂️ IPFS: {step.ipfsCid.slice(0, 12)}...
-                                {step.ipfsCid.slice(-8)}
-                              </p>
-                            )}
                             {step.errorMessage && (
                               <p className="text-red-600">
                                 ❌ Error: {step.errorMessage}
@@ -129,10 +140,6 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                     <div className="text-xs mt-1 space-y-1">
                       {stepName === "ipfs_upload" && deploymentState.cid && (
                         <>
-                          <p className="text-purple-600">
-                            🗂️ CID: {deploymentState.cid.slice(0, 12)}...
-                            {deploymentState.cid.slice(-8)}
-                          </p>
                           <a
                             href={`https://gateway.lighthouse.storage/ipfs/${deploymentState.cid}`}
                             target="_blank"
@@ -146,14 +153,6 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                       {stepName === "contract_signing" &&
                         deploymentState.contractSigned && (
                           <p className="text-green-600">✅ Contract Signed</p>
-                        )}
-                      {stepName === "filecoin_access_deploy" &&
-                        deploymentState.filecoinAccessControl && (
-                          <p className="text-green-600">
-                            📍 Access Control:{" "}
-                            {deploymentState.filecoinAccessControl.slice(0, 8)}
-                            ...{deploymentState.filecoinAccessControl.slice(-6)}
-                          </p>
                         )}
                       {stepName === "flow_deploy" &&
                         deploymentState.flowContractAddr && (

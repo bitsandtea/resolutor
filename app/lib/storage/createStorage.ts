@@ -5,7 +5,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { AgreementFactoryABI } from "../ABIs";
+import { AccessControlABI, AgreementFactoryABI } from "../ABIs";
 import { CONTRACT_ADDRESSES, MEDIATOR_ADDRESS, config } from "../wagmi";
 
 interface CreateAgreementParams {
@@ -15,6 +15,13 @@ interface CreateAgreementParams {
   depositB: bigint;
   token: `0x${string}`; // Optional, will use MOCK_ERC20 if not provided
   filecoinAccessControl: `0x${string}`;
+  fileCid?: string; // Optional IPFS hash to store after agreement creation
+  agreementId?: string; // Optional agreement ID for file storage
+}
+
+interface StoreFileParams {
+  fileCid: string;
+  agreementId: string;
 }
 
 // React hook for component usage
@@ -62,6 +69,38 @@ export const useCreateAgreement = () => {
     return null;
   };
 
+  const storeFile = async (params: StoreFileParams) => {
+    if (
+      chainId !== Number(process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID)
+    ) {
+      console.log(
+        "Switching chain to Filecoin Calibration Chain for file storage"
+      );
+      await switchChain(config, {
+        chainId: Number(
+          process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
+        ) as 314159,
+      });
+      // Wait a moment for the chain switch to fully complete
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    try {
+      const storeFileParams = {
+        address: CONTRACT_ADDRESSES.ACCESS_CONTROL,
+        abi: AccessControlABI,
+        functionName: "storeFile",
+        args: [params.fileCid, params.agreementId],
+      };
+
+      const storeFileResult = await writeContract(storeFileParams);
+      return storeFileResult;
+    } catch (error) {
+      console.error("Error storing file:", error);
+      throw error;
+    }
+  };
+
   const createAgreement = async (params: CreateAgreementParams) => {
     if (chainId !== Number(process.env.NEXT_PUBLIC_FLOW_EVM_TESTNET_CHAIN_ID)) {
       console.log("Switching chain to Flow EVM Testnet");
@@ -91,6 +130,15 @@ export const useCreateAgreement = () => {
       // Create the agreement using AgreementFactory
       const agreementResult = await writeContract(sendParams);
 
+      // If fileCid and agreementId are provided, store the file after agreement creation
+      if (params.fileCid && params.agreementId) {
+        console.log("Storing file after agreement creation");
+        await storeFile({
+          fileCid: params.fileCid,
+          agreementId: params.agreementId,
+        });
+      }
+
       return agreementResult;
     } catch (error) {
       console.error("Error creating agreement:", error);
@@ -100,6 +148,7 @@ export const useCreateAgreement = () => {
 
   return {
     createAgreement,
+    storeFile,
     isPending,
     error,
     txHash,

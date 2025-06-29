@@ -72,6 +72,10 @@ const NewContractPage: React.FC = () => {
   const [isDraftLoading, setIsDraftLoading] = useState<boolean>(false);
   const [isDraftSaving, setIsDraftSaving] = useState<boolean>(false);
 
+  // Step transition loading state
+  const [isStepTransitioning, setIsStepTransitioning] =
+    useState<boolean>(false);
+
   // Effect to load draft on component mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -80,17 +84,8 @@ const NewContractPage: React.FC = () => {
     if (urlDraftId) {
       // Load specific draft from URL
       loadDraft(urlDraftId);
-    } else {
-      // Check for test case - if no draftId in URL, use the test one
-      const testDraftId = "cmceyq73u000ap0y84t7f86dd";
-      console.log("No draftId in URL, trying test draftId:", testDraftId);
-
-      // Update URL with test draftId for easier testing
-      const newUrl = `${window.location.pathname}?draftId=${testDraftId}`;
-      window.history.replaceState({}, "", newUrl);
-
-      loadDraft(testDraftId);
     }
+    // If no draftId in URL, start fresh - don't load any draft
   }, []);
 
   // Auto-save effect - save draft when important data changes
@@ -460,14 +455,17 @@ const NewContractPage: React.FC = () => {
     }
   };
 
-  const handleFormStepNext = () => {
+  const handleFormStepNext = async () => {
+    setIsStepTransitioning(true);
+    setErrorMessage(null); // Clear any previous error messages
+
     const creatorSigner: ContractSigner = {
       id: "creator_" + Date.now(),
       name: "John Smith",
       email: "john.smith@company.com",
       role: "creator",
       status: "pending",
-      depositAmount: 0,
+      depositAmount: 1000,
     };
 
     const defaultSigner: ContractSigner = {
@@ -482,13 +480,17 @@ const NewContractPage: React.FC = () => {
     setSigners([creatorSigner, defaultSigner]);
     setUiStep("manageSigners");
 
-    // Save draft after step change
-    setTimeout(() => {
-      saveDraft();
-    }, 100);
+    // Save draft after step change and clear loading state
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay for UI smoothness
+      await saveDraft();
+    } finally {
+      setIsStepTransitioning(false);
+    }
   };
 
   const handleSignersStepNext = () => {
+    setErrorMessage(null); // Clear any previous error messages
     setUiStep("deploymentProgress");
     handleSaveContract();
   };
@@ -580,7 +582,7 @@ Powered by Resolutor`;
 
   // Draft persistence functions
   const saveDraft = async () => {
-    if (isDraftSaving) return;
+    if (isDraftSaving) return Promise.resolve();
 
     setIsDraftSaving(true);
     try {
@@ -849,6 +851,16 @@ Powered by Resolutor`;
             : "Loading..."}
         </p>
         {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
+      </div>
+    );
+  }
+
+  // Show loading state during step transition
+  if (isStepTransitioning) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-grow">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-gray-600 text-lg">Setting up signers...</p>
       </div>
     );
   }
@@ -1149,7 +1161,7 @@ Powered by Resolutor`;
               onSignersChange={setSigners}
               onNext={handleSignersStepNext}
               onBack={handleSignersStepBack}
-              isLoading={isLoading}
+              isLoading={isLoading || isStepTransitioning || isDraftSaving}
               inputBaseClasses={inputBaseClasses}
             />
           )}

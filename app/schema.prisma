@@ -34,7 +34,6 @@ model Agreement {
   
   // Filecoin contract references  
   filecoinAccessControl  String? // Address of Filecoin AccessControl
-  filecoinAccessTx       String? // Transaction hash of access control creation
   
   // Process tracking
   processStatus  String @default("draft") // draft, db_saved, ipfs_uploaded, filecoin_deployed, flow_deployed, completed, failed

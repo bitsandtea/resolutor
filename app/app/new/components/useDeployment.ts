@@ -32,6 +32,7 @@ export const useDeployment = ({
   const chainId = useChainId();
   const {
     createAgreement,
+    storeFile,
     isPending: isCreatingAgreement,
     error: createError,
     txHash: flowTxHash,
@@ -210,6 +211,22 @@ export const useDeployment = ({
             process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || ""
           );
 
+          // Update database with the predefined ACCESS_CONTROL_ADDRESS
+          const updateResponse = await fetch("/api/update-deployment-step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agreementId,
+              stepName: "filecoin_access_deploy",
+              status: "completed",
+              contractAddr: process.env.NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS,
+            }),
+          });
+
+          if (!updateResponse.ok) {
+            console.error("Failed to update filecoin access control address");
+          }
+
           return { success: true, txHash: "pending" };
         } catch (walletError) {
           await updateDeploymentStep(
@@ -220,6 +237,93 @@ export const useDeployment = ({
             `Wallet transaction failed: ${walletError}`
           );
           throw new Error(`Wallet transaction failed: ${walletError}`);
+        }
+      } else if (stepName === "filecoin_store_file") {
+        if (
+          chainId !==
+          Number(process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID)
+        ) {
+          console.log(
+            "Switching chain to Filecoin Calibration Chain for file storage"
+          );
+          await switchChain(config, {
+            chainId: Number(
+              process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
+            ) as 314159,
+          });
+        }
+
+        if (!isConnected || !address) {
+          throw new Error(
+            "Wallet not connected. Please connect your wallet first."
+          );
+        }
+
+        // Get the current deployment state to get the CID
+        const currentStatus = await checkDeploymentStatus(true);
+        if (!currentStatus?.currentState?.cid) {
+          throw new Error(
+            "IPFS CID not found. Please complete IPFS upload first."
+          );
+        }
+
+        // Mark step as in progress
+        await updateDeploymentStep("filecoin_store_file", "in_progress");
+
+        try {
+          await storeFile({
+            fileCid: currentStatus.currentState.cid,
+            agreementId: agreementId,
+          });
+
+          // Update database to mark step as completed
+          const updateResponse = await fetch("/api/update-deployment-step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agreementId,
+              stepName: "filecoin_store_file",
+              status: "completed",
+            }),
+          });
+
+          if (!updateResponse.ok) {
+            console.error("Failed to update filecoin store file step");
+          }
+
+          // Proceed to next step automatically
+          setTimeout(async () => {
+            await checkDeploymentStatus(true);
+            await executeStep("flow_deploy");
+          }, 2000);
+
+          return { success: true, txHash: "pending" };
+        } catch (walletError) {
+          const errorMessage =
+            walletError instanceof Error
+              ? walletError.message
+              : String(walletError);
+          console.error("Filecoin store file error:", walletError);
+
+          // Check for specific error types
+          let displayError = errorMessage;
+          if (errorMessage.includes("execution reverted")) {
+            displayError =
+              "Transaction reverted. The file may already exist or access control failed.";
+          } else if (errorMessage.includes("User rejected")) {
+            displayError = "Transaction rejected by user.";
+          } else if (errorMessage.includes("insufficient funds")) {
+            displayError = "Insufficient funds for transaction.";
+          }
+
+          await updateDeploymentStep(
+            "filecoin_store_file",
+            "failed",
+            undefined,
+            undefined,
+            displayError
+          );
+          throw new Error(displayError);
         }
       } else if (stepName === "flow_deploy") {
         if (!isConnected || !address) {
@@ -236,12 +340,26 @@ export const useDeployment = ({
         }
 
         try {
+          // Fetch actual deposit amounts from the database
+          const agreementResponse = await fetch(
+            `/api/contracts/${agreementId}`
+          );
+          if (!agreementResponse.ok) {
+            throw new Error("Failed to fetch agreement data");
+          }
+          const agreementData = await agreementResponse.json();
+          if (!agreementData.success) {
+            throw new Error(agreementData.error || "Failed to load agreement");
+          }
+
+          const { depositA, depositB } = agreementData.agreement;
+
           await createAgreement({
             partyA: address,
             mediator:
               (process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS as `0x${string}`) || "",
-            depositA: parseEther("0.1"),
-            depositB: parseEther("0.1"),
+            depositA: parseEther(depositA.toString()),
+            depositB: parseEther(depositB.toString()),
             token: CONTRACT_ADDRESSES.MOCK_ERC20,
             filecoinAccessControl:
               (process.env
@@ -457,8 +575,17 @@ export const useDeployment = ({
       return "pending";
     }
 
-    // First check if we have deployment state indicators (CID, contract addresses)
-    // These are more reliable than deployment steps which might not be recorded properly
+    // First check deployment steps for explicit status (including failed)
+    const step = deploymentState.deploymentSteps?.find(
+      (s) => s.stepName === stepName
+    );
+
+    if (step) {
+      return step.status as DeploymentStepStatus;
+    }
+
+    // Then check if we have deployment state indicators (CID, contract addresses)
+    // These are more reliable for completed steps
     if (stepName === "ipfs_upload" && deploymentState.cid) {
       return "completed";
     }
@@ -473,15 +600,6 @@ export const useDeployment = ({
     }
     if (stepName === "flow_deploy" && deploymentState.flowContractAddr) {
       return "completed";
-    }
-
-    // Then check actual deployment steps
-    const step = deploymentState.deploymentSteps?.find(
-      (s) => s.stepName === stepName
-    );
-
-    if (step) {
-      return step.status as DeploymentStepStatus;
     }
 
     // Fallback to step order logic
@@ -675,6 +793,28 @@ export const useDeployment = ({
     }
   }, [agreementId]);
 
+  const retryStep = async (stepName: DeploymentStepName) => {
+    if (isProcessing) {
+      onError("Another deployment step is already in progress");
+      return;
+    }
+
+    try {
+      // Reset the failed step to pending first
+      await updateDeploymentStep(stepName, "pending");
+
+      // Wait a moment for the database to update
+      setTimeout(async () => {
+        await checkDeploymentStatus(true);
+        await executeStep(stepName);
+      }, 500);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      onError(`Failed to retry ${stepName}: ${errorMessage}`);
+    }
+  };
+
   return {
     deploymentState,
     currentStep,
@@ -692,5 +832,6 @@ export const useDeployment = ({
     resetDeployment,
     getStepStatus,
     getNextPendingStep,
+    retryStep,
   };
 };
