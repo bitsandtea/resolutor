@@ -73,6 +73,7 @@ export async function GET(
           depositAPaid: agreement.depositAPaid,
           depositBPaid: agreement.depositBPaid,
           createdAt: agreement.createdAt,
+          flowContractAddr: agreement.flowContractAddr,
           // Add any other details from the 'agreement' object you want to send to the frontend
         },
         message: "Agreement content retrieved successfully.",

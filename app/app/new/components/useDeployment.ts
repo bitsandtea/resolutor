@@ -35,6 +35,8 @@ export const useDeployment = ({
     isPending: isCreatingAgreement,
     error: createError,
     txHash: flowTxHash,
+    isSuccess: isFlowSuccess,
+    contractAddress: flowContractAddress,
   } = useCreateAgreement();
   const {
     createAccessControl,
@@ -246,8 +248,9 @@ export const useDeployment = ({
                 .NEXT_PUBLIC_FILECOIN_ACCESS_CONTROL as `0x${string}`) || "",
           });
 
-          setPendingTxHash("flow_deploy"); // Set a placeholder for tracking
-          return { success: true, txHash: "pending", contractAddr: "pending" };
+          // Don't return immediately - let the useEffect handle transaction completion
+          // The transaction success will be handled by the useEffect that watches isFlowSuccess
+          return;
         } catch (walletError) {
           throw new Error(`Wallet transaction failed: ${walletError}`);
         }
@@ -573,38 +576,54 @@ export const useDeployment = ({
     }
   }, [accessError, currentStep]);
 
-  // Handle completion of flow agreement creation (wagmi hook)
+  // Handle flow transaction confirmation
   useEffect(() => {
-    // Only handle this if we're currently on the flow_deploy step
-    if (currentStep === "flow_deploy" && pendingTxHash === "flow_deploy") {
-      if (!isCreatingAgreement && !createError) {
-        // Flow agreement creation completed successfully
-        // Clear pending state
-        setPendingTxHash(null);
+    if (isFlowSuccess && flowTxHash && currentStep === "flow_deploy") {
+      // Update step as completed with contract address
+      updateDeploymentStep(
+        "flow_deploy",
+        "completed",
+        flowTxHash,
+        flowContractAddress || undefined
+      );
 
-        // Check deployment status and proceed to completion
-        setTimeout(async () => {
-          const updatedStatus = await checkDeploymentStatus(true);
+      // Clear pending state
+      setPendingTxHash(null);
 
-          if (updatedStatus?.isComplete) {
-            setCurrentStep("completed");
-            setIsProcessing(false);
-            onComplete(updatedStatus.currentState);
-          } else {
-            // Mark as completed manually if backend hasn't updated yet
-            setCurrentStep("completed");
-            setIsProcessing(false);
-          }
-        }, 2000);
-      } else if (!isCreatingAgreement && createError) {
-        // Flow agreement creation failed
-        setPendingTxHash(null);
-        setIsProcessing(false);
-        setCanRetry(true);
-        onError(`Flow Agreement deployment failed: ${createError.message}`);
-      }
+      // Proceed to completion
+      setTimeout(async () => {
+        const updatedStatus = await checkDeploymentStatus(true);
+
+        if (updatedStatus?.isComplete) {
+          setCurrentStep("completed");
+          setIsProcessing(false);
+          onComplete(updatedStatus.currentState);
+        } else {
+          // Mark as completed manually if backend hasn't updated yet
+          setCurrentStep("completed");
+          setIsProcessing(false);
+          onComplete(updatedStatus.currentState);
+        }
+      }, 2000);
     }
-  }, [isCreatingAgreement, createError, currentStep, pendingTxHash]);
+  }, [isFlowSuccess, flowTxHash, currentStep, flowContractAddress]);
+
+  // Handle flow agreement creation errors
+  useEffect(() => {
+    if (createError && currentStep === "flow_deploy") {
+      updateDeploymentStep(
+        "flow_deploy",
+        "failed",
+        flowTxHash || undefined,
+        undefined,
+        createError.message
+      );
+      setPendingTxHash(null);
+      setIsProcessing(false);
+      setCanRetry(true);
+      onError(`Flow Agreement deployment failed: ${createError.message}`);
+    }
+  }, [createError, currentStep, flowTxHash]);
 
   // Periodic polling for deployment status when processing
   useEffect(() => {

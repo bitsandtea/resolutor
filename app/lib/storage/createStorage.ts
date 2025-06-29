@@ -88,7 +88,6 @@ export const useCreateAgreement = () => {
           CONTRACT_ADDRESSES.ACCESS_CONTROL,
         ],
       };
-      console.log("Creating agreement with params:", sendParams);
       // Create the agreement using AgreementFactory
       const agreementResult = await writeContract(sendParams);
 

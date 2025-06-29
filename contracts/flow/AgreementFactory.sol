@@ -19,29 +19,7 @@ contract AgreementFactory {
         implementation = address(new MultiSigAgreement());
     }
 
-/*
-0
-: 
-"0x86177D4A036624E52bDAbAa0D048d56862145D5d"
-1
-: 
-"0x0000000000000000000000000000000000000000"
-2
-: 
-"0xe31317797f2bb6e2EFCD4B46C2C1B9db74CDb300"
-3
-: 
-100000000000000000n
-4
-: 
-100000000000000000n
-5
-: 
-"0x43aB8084f05f492153D5758C8aA96ad0A414C3DC"
-6
-: 
-"0x25408Bd25ad4923e86dEF78F53D67c6E0e63B143"
-*/
+
     function createAgreement(
         address _partyA,
         address _mediator,
