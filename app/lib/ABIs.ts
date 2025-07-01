@@ -122,6 +122,55 @@ export const AgreementFactoryABI = [
     type: "function",
   },
   {
+    inputs: [
+      {
+        internalType: "address",
+        name: "_partyA",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_partyB",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_mediator",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "_depositA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "_depositB",
+        type: "uint256",
+      },
+      {
+        internalType: "address",
+        name: "_token",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_filecoinAccessControl",
+        type: "address",
+      },
+    ],
+    name: "createAndSignAgreement",
+    outputs: [
+      {
+        internalType: "address",
+        name: "newAgreement",
+        type: "address",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
     inputs: [],
     name: "getAllAgreements",
     outputs: [
@@ -1047,6 +1096,19 @@ export const MultiSigAgreementABI = [
   {
     inputs: [],
     name: "signContract",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "_partyB",
+        type: "address",
+      },
+    ],
+    name: "signContractWithPartyB",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",

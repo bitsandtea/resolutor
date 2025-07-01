@@ -21,14 +21,9 @@ export const stepDefinitions: Record<
     icon: "💾",
   },
   flow_deploy: {
-    title: "Deploy Flow Contract",
-    description: "Creating Flow agreement contract",
-    icon: "⚡",
-  },
-  contract_signing: {
-    title: "Sign Contract",
-    description: "Digitally sign the contract before deployment",
-    icon: "✍️",
+    title: "Create & Sign Agreement",
+    description: "Deploying Flow contract and signing in one transaction",
+    icon: "🚀",
   },
 };
 
@@ -37,5 +32,4 @@ export const stepOrder: DeploymentStepName[] = [
   "filecoin_access_deploy",
   "filecoin_store_file",
   "flow_deploy",
-  "contract_signing",
 ];

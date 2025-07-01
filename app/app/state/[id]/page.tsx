@@ -1,6 +1,7 @@
 "use client";
 
 import { AccessControlABI, MultiSigAgreementABI } from "@/lib/ABIs";
+import { formatContractContent } from "@/lib/contract-formatter";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -860,9 +861,12 @@ const StateReaderPage: React.FC = () => {
                       </p>
                     </div>
                   ) : (
-                    <pre className="whitespace-pre-wrap text-sm font-mono text-gray-800">
-                      {ipfsContent}
-                    </pre>
+                    <div
+                      className="prose max-w-none"
+                      dangerouslySetInnerHTML={{
+                        __html: formatContractContent(ipfsContent || ""),
+                      }}
+                    />
                   )}
                 </div>
               </div>

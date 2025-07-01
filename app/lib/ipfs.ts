@@ -145,7 +145,7 @@ export async function pinToIPFS(
           data: {
             cid,
             processStatus: "ipfs_uploaded",
-            currentStep: "contract_signing", // Move to contract signing step
+            currentStep: "filecoin_access_deploy", // Move to filecoin access deploy step
             lastStepAt: new Date(),
             updatedAt: new Date(),
           },

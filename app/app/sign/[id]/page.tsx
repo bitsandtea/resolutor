@@ -1,6 +1,8 @@
 "use client";
 
+import AddressDisplay from "@/components/AddressDisplay";
 import { MockERC20ABI, MultiSigAgreementABI } from "@/lib/ABIs";
+import { formatContractContent } from "@/lib/contract-formatter";
 import { CONTRACT_ADDRESSES } from "@/lib/wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useParams, useRouter } from "next/navigation";
@@ -12,14 +14,18 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
+import { flowTestnet } from "wagmi/chains";
 
 interface Agreement {
   id: string;
+  cid: string | null;
   flowContractAddr: string;
   depositA: number;
   depositB: number;
   partyA: string;
   partyB: string | null;
+  templateType: string;
+  signersData: string | null;
 }
 
 interface ContractState {
@@ -37,13 +43,22 @@ interface ContractState {
   partyBApproved: boolean;
 }
 
+interface PartyBFormData {
+  name: string;
+  email: string;
+}
+
 type Step =
   | "connect"
-  | "checkContract"
-  | "signContract"
+  | "loadingContract"
+  | "displayContract"
   | "approveToken"
-  | "approveDeposit"
+  | "takeDeposits"
+  | "registerPartyB"
+  | "legalAcknowledgment"
+  | "signContract"
   | "completed"
+  | "readOnly"
   | "error";
 
 const STATUS_NAMES = [
@@ -63,37 +78,98 @@ const SignContractPage: React.FC = () => {
   const { address, isConnected } = useAccount();
 
   const [agreement, setAgreement] = useState<Agreement | null>(null);
+  const [contractContent, setContractContent] = useState<string | null>(null);
+  const [ipfsContent, setIpfsContent] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<Step>("connect");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string>("Loading...");
+  const [contractState, setContractState] = useState<ContractState | null>(
+    null
+  );
+  const [userBalance, setUserBalance] = useState<bigint>(BigInt(0));
   const [requiredDeposit, setRequiredDeposit] = useState<bigint>(BigInt(0));
-  const [formattedContractState, setFormattedContractState] =
-    useState<ContractState | null>(null);
+  const [partyBForm, setPartyBForm] = useState<PartyBFormData>({
+    name: "",
+    email: "",
+  });
+  const [legalAcknowledged, setLegalAcknowledged] = useState<boolean>(false);
+  const [isPartyA, setIsPartyA] = useState<boolean>(false);
 
   // Contract write hooks
-  const {
-    writeContract: writeSignContract,
-    data: signHash,
-    isPending: isSignPending,
-  } = useWriteContract();
   const {
     writeContract: writeApproveToken,
     data: approveHash,
     isPending: isApprovePending,
   } = useWriteContract();
+
   const {
-    writeContract: writeApproveDeposit,
-    data: depositHash,
-    isPending: isDepositPending,
+    writeContract: writeTakeDeposits,
+    data: depositsHash,
+    isPending: isDepositsPending,
+  } = useWriteContract();
+
+  const {
+    writeContract: writeSignContract,
+    data: signHash,
+    isPending: isSignPending,
   } = useWriteContract();
 
   // Transaction receipt hooks
-  const { isLoading: isSignConfirming, isSuccess: isSignSuccess } =
-    useWaitForTransactionReceipt({ hash: signHash });
   const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } =
     useWaitForTransactionReceipt({ hash: approveHash });
-  const { isLoading: isDepositConfirming, isSuccess: isDepositSuccess } =
-    useWaitForTransactionReceipt({ hash: depositHash });
+  const { isLoading: isDepositsConfirming, isSuccess: isDepositsSuccess } =
+    useWaitForTransactionReceipt({ hash: depositsHash });
+  const { isLoading: isSignConfirming, isSuccess: isSignSuccess } =
+    useWaitForTransactionReceipt({ hash: signHash });
+
+  // Database step management functions
+  const updateSigningStep = async (
+    stepName: string,
+    status: string,
+    txHash?: string,
+    errorMessage?: string
+  ) => {
+    try {
+      const response = await fetch("/api/update-deployment-step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agreementId,
+          stepName,
+          status,
+          txHash,
+          errorMessage,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        console.error("Failed to update signing step:", result.error);
+      }
+      return result.success;
+    } catch (error) {
+      console.error("Error updating signing step:", error);
+      return false;
+    }
+  };
+
+  const loadSigningState = async () => {
+    try {
+      const response = await fetch(
+        `/api/deployment-status?agreementId=${agreementId}`
+      );
+      if (!response.ok) return null;
+
+      const result = await response.json();
+      if (!result.success) return null;
+
+      return result.currentState;
+    } catch (error) {
+      console.error("Error loading signing state:", error);
+      return null;
+    }
+  };
 
   // Fetch agreement data
   useEffect(() => {
@@ -101,16 +177,22 @@ const SignContractPage: React.FC = () => {
 
     const fetchAgreement = async () => {
       try {
+        setLoadingMessage("Fetching agreement data...");
         const response = await fetch(`/api/contracts/${agreementId}`);
         if (!response.ok) throw new Error("Failed to fetch agreement");
         const result = await response.json();
-        const agreementData = result.agreement;
 
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load agreement");
+        }
+
+        const agreementData = result.agreement;
         if (!agreementData.flowContractAddr) {
           throw new Error("No Flow contract address found for this agreement");
         }
 
         setAgreement(agreementData);
+        setContractContent(result.content);
         setIsLoading(false);
       } catch (error) {
         console.error("Error fetching agreement:", error);
@@ -125,8 +207,49 @@ const SignContractPage: React.FC = () => {
     fetchAgreement();
   }, [agreementId]);
 
+  // Fetch IPFS content
+  useEffect(() => {
+    if (!agreement?.cid) return;
+
+    const fetchIpfsContent = async () => {
+      try {
+        setLoadingMessage("Loading contract content from IPFS...");
+        const gateways = [
+          `https://gateway.lighthouse.storage/ipfs/${agreement.cid}`,
+          `https://ipfs.io/ipfs/${agreement.cid}`,
+          `https://cloudflare-ipfs.com/ipfs/${agreement.cid}`,
+        ];
+
+        for (const gateway of gateways) {
+          try {
+            const response = await fetch(gateway);
+            if (response.ok) {
+              const content = await response.text();
+              setIpfsContent(content);
+              return;
+            }
+          } catch (gatewayError) {
+            console.warn(`Failed to fetch from ${gateway}:`, gatewayError);
+          }
+        }
+
+        // Fallback to local content if IPFS fails
+        if (contractContent) {
+          setIpfsContent(contractContent);
+        } else {
+          throw new Error("Failed to fetch from all IPFS gateways");
+        }
+      } catch (error) {
+        console.error("Error fetching IPFS content:", error);
+        setIpfsContent(contractContent || "Failed to load contract content");
+      }
+    };
+
+    fetchIpfsContent();
+  }, [agreement?.cid, contractContent]);
+
   // Read contract state
-  const { data: contractState, refetch: refetchState } = useReadContract({
+  const { data: rawContractState, refetch: refetchState } = useReadContract({
     address: agreement?.flowContractAddr as `0x${string}`,
     abi: MultiSigAgreementABI,
     functionName: "getState",
@@ -136,51 +259,35 @@ const SignContractPage: React.FC = () => {
     },
   }) as { data: readonly unknown[] | undefined; refetch: () => void };
 
-  useEffect(() => {
-    /*
-         address partyA,
-        address partyB,
-        address mediator,
-        uint256 depositA,
-        uint256 depositB,
-        Status status,
-        address filecoinAccessControl,
-        uint256 propAmountToA,
-        uint256 propAmountToB,
-        uint8 approvalCount,
-        bool partyAApproved,
-        bool partyBApproved
-        */
+  console.log("rawContractState", {
+    address: CONTRACT_ADDRESSES.MOCK_ERC20,
+    chainId: flowTestnet.id,
+    abi: MockERC20ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+      refetchInterval: 10000,
+    },
+  });
+  // Read user's token balance
+  const { data: balance, refetch: refetchBalance } = useReadContract({
+    address: CONTRACT_ADDRESSES.MOCK_ERC20,
+    chainId: flowTestnet.id,
+    abi: MockERC20ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+      refetchInterval: 10000,
+    },
+  }) as { data: bigint | undefined; refetch: () => void };
 
-    if (
-      contractState &&
-      isConnected &&
-      Array.isArray(contractState) &&
-      contractState.length >= 12
-    ) {
-      console.log("contractState", contractState);
-      const newContractState: ContractState = {
-        partyA: contractState[0] as string,
-        partyB: contractState[1] as string,
-        mediator: contractState[2] as string,
-        depositA: contractState[3] as bigint,
-        depositB: contractState[4] as bigint,
-        status: contractState[5] as number,
-        filecoinAccessControl: contractState[6] as string,
-        propAmountToA: contractState[7] as bigint,
-        propAmountToB: contractState[8] as bigint,
-        approvalCount: contractState[9] as number,
-        partyAApproved: contractState[10] as boolean,
-        partyBApproved: contractState[11] as boolean,
-      };
-      console.log("newContractState", newContractState);
-      setFormattedContractState(newContractState);
-    }
-  }, [contractState, isConnected]);
-
-  // Check user's token allowance
+  console.log("balance", balance);
+  // Read user's token allowance
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: CONTRACT_ADDRESSES.MOCK_ERC20,
+    chainId: flowTestnet.id,
     abi: MockERC20ABI,
     functionName: "allowance",
     args:
@@ -188,115 +295,160 @@ const SignContractPage: React.FC = () => {
         ? [address, agreement.flowContractAddr as `0x${string}`]
         : undefined,
     query: {
-      enabled:
-        !!address &&
-        !!agreement?.flowContractAddr &&
-        currentStep === "approveToken",
-      refetchInterval: 3000,
+      enabled: !!address && !!agreement?.flowContractAddr && isConnected,
+      refetchInterval: 5000,
     },
   }) as { data: bigint | undefined; refetch: () => void };
 
-  // Update step based on contract state and user connection
+  // Process contract state
+  useEffect(() => {
+    if (
+      rawContractState &&
+      Array.isArray(rawContractState) &&
+      rawContractState.length >= 12
+    ) {
+      const state: ContractState = {
+        partyA: rawContractState[0] as string,
+        partyB: rawContractState[1] as string,
+        mediator: rawContractState[2] as string,
+        depositA: rawContractState[3] as bigint,
+        depositB: rawContractState[4] as bigint,
+        status: rawContractState[5] as number,
+        filecoinAccessControl: rawContractState[6] as string,
+        propAmountToA: rawContractState[7] as bigint,
+        propAmountToB: rawContractState[8] as bigint,
+        approvalCount: rawContractState[9] as number,
+        partyAApproved: rawContractState[10] as boolean,
+        partyBApproved: rawContractState[11] as boolean,
+      };
+      setContractState(state);
+    }
+  }, [rawContractState]);
+
+  // Set user balance
+  useEffect(() => {
+    if (balance) {
+      setUserBalance(balance);
+    }
+  }, [balance]);
+
+  // Main step flow logic
   useEffect(() => {
     if (!isConnected) {
       setCurrentStep("connect");
       return;
     }
 
-    if (!formattedContractState || !address || !agreement) {
-      setCurrentStep("checkContract");
+    if (!contractState || !address || !agreement) {
+      setCurrentStep("loadingContract");
       return;
     }
 
-    // Check if contract already signed
-    if (formattedContractState.status === 0) {
-      // Created status
+    // Check if user is Party A (creator) - show read-only view
+    const userIsPartyA =
+      contractState.partyA.toLowerCase() === address.toLowerCase();
+    if (userIsPartyA) {
+      setIsPartyA(true);
+      setCurrentStep("readOnly");
+      return;
+    }
+
+    // Load signing state from database and determine current step
+    const determineStep = async () => {
+      const signingState = await loadSigningState();
+
+      // Check if this user is authorized (Party B)
+      const userIsPartyB =
+        contractState.partyB.toLowerCase() === address.toLowerCase() ||
+        contractState.partyB === "0x0000000000000000000000000000000000000000";
+
       if (
-        formattedContractState.partyB ===
-        "0x0000000000000000000000000000000000000000"
+        !userIsPartyB &&
+        contractState.partyB !== "0x0000000000000000000000000000000000000000"
       ) {
-        setCurrentStep("signContract");
+        setErrorMessage(
+          "You are not authorized to interact with this contract"
+        );
+        setCurrentStep("error");
         return;
       }
-    }
 
-    // Check if user is party A or B and determine required deposit
-    const isPartyA =
-      formattedContractState.partyA.toLowerCase() === address.toLowerCase();
-    const isPartyB =
-      formattedContractState.partyB.toLowerCase() === address.toLowerCase();
+      setRequiredDeposit(contractState.depositB);
 
-    if (!isPartyA && !isPartyB) {
-      setErrorMessage("You are not authorized to sign this contract");
-      setCurrentStep("error");
-      return;
-    }
+      // New flow: approve → sign → takeDeposits
+      // Check database state first, then fallback to blockchain state
+      const approveStep = signingState?.deploymentSteps?.find(
+        (s: { stepName: string; status: string }) =>
+          s.stepName === "sign_approve_token"
+      );
+      const signStep = signingState?.deploymentSteps?.find(
+        (s: { stepName: string; status: string }) =>
+          s.stepName === "sign_contract"
+      );
+      const depositStep = signingState?.deploymentSteps?.find(
+        (s: { stepName: string; status: string }) =>
+          s.stepName === "sign_take_deposits"
+      );
 
-    const deposit = isPartyA
-      ? formattedContractState.depositA
-      : formattedContractState.depositB;
-    const hasApproved = isPartyA
-      ? formattedContractState.partyAApproved
-      : formattedContractState.partyBApproved;
-
-    setRequiredDeposit(deposit);
-
-    // Contract is signed, check deposit flow
-    if (formattedContractState.status >= 1) {
-      // Signed or beyond
-      if (!hasApproved) {
-        // Check if user has sufficient allowance
-        if (allowance && allowance >= deposit) {
-          setCurrentStep("approveDeposit");
-        } else {
+      if (depositStep?.status === "completed") {
+        setCurrentStep("completed");
+      } else if (
+        signStep?.status === "completed" ||
+        contractState.status >= 1
+      ) {
+        // Contract is signed, time for deposits
+        setCurrentStep("takeDeposits");
+      } else if (
+        approveStep?.status === "completed" &&
+        allowance &&
+        allowance >= contractState.depositB
+      ) {
+        // Token approved, time to sign
+        setCurrentStep("signContract");
+      } else {
+        // Start with token approval
+        if (currentStep === "loadingContract") {
+          setCurrentStep("displayContract");
+        } else if (currentStep === "displayContract") {
           setCurrentStep("approveToken");
         }
-      } else {
-        // User has approved, check overall status
-        if (formattedContractState.status >= 4) {
-          // Active or beyond
-          setCurrentStep("completed");
-        } else {
-          setCurrentStep("completed"); // Waiting for other party
-        }
       }
+    };
+
+    if (currentStep === "loadingContract" || (contractState && address)) {
+      determineStep();
     }
-  }, [isConnected, formattedContractState, address, agreement, allowance]);
+  }, [isConnected, contractState, address, agreement, allowance, currentStep]);
 
   // Handle transaction successes
   useEffect(() => {
-    if (isSignSuccess) {
-      refetchState();
-      // Will automatically move to next step via the main effect
-    }
-  }, [isSignSuccess, refetchState]);
-
-  useEffect(() => {
-    if (isApproveSuccess) {
+    if (isApproveSuccess && approveHash) {
+      updateSigningStep("sign_approve_token", "completed", approveHash);
       refetchAllowance();
-      // Will automatically move to approveDeposit step
+      setCurrentStep("signContract");
     }
-  }, [isApproveSuccess, refetchAllowance]);
+  }, [isApproveSuccess, approveHash, refetchAllowance]);
 
   useEffect(() => {
-    if (isDepositSuccess) {
+    if (isSignSuccess && signHash) {
+      updateSigningStep("sign_contract", "completed", signHash);
+      refetchState();
+      setCurrentStep("takeDeposits");
+    }
+  }, [isSignSuccess, signHash, refetchState]);
+
+  useEffect(() => {
+    if (isDepositsSuccess && depositsHash) {
+      updateSigningStep("sign_take_deposits", "completed", depositsHash);
       refetchState();
       setCurrentStep("completed");
     }
-  }, [isDepositSuccess, refetchState]);
+  }, [isDepositsSuccess, depositsHash, refetchState]);
 
-  const handleSignContract = () => {
-    if (!agreement?.flowContractAddr) return;
+  const handleApproveToken = async () => {
+    if (!agreement?.flowContractAddr || !requiredDeposit) return;
 
-    writeSignContract({
-      address: agreement.flowContractAddr as `0x${string}`,
-      abi: MultiSigAgreementABI,
-      functionName: "signContract",
-    });
-  };
-
-  const handleApproveToken = () => {
-    if (!agreement?.flowContractAddr) return;
+    await updateSigningStep("sign_approve_token", "in_progress");
 
     writeApproveToken({
       address: CONTRACT_ADDRESSES.MOCK_ERC20,
@@ -306,21 +458,62 @@ const SignContractPage: React.FC = () => {
     });
   };
 
-  const handleApproveDeposit = () => {
+  const handleSignContract = async () => {
     if (!agreement?.flowContractAddr) return;
 
-    writeApproveDeposit({
+    await updateSigningStep("sign_contract", "in_progress");
+
+    writeSignContract({
       address: agreement.flowContractAddr as `0x${string}`,
       abi: MultiSigAgreementABI,
-      functionName: "approveDeposit",
+      functionName: "signContract",
     });
   };
+
+  const handleTakeDeposits = async () => {
+    if (!agreement?.flowContractAddr) return;
+
+    await updateSigningStep("sign_take_deposits", "in_progress");
+
+    writeTakeDeposits({
+      address: agreement.flowContractAddr as `0x${string}`,
+      abi: MultiSigAgreementABI,
+      functionName: "takeDeposits",
+    });
+  };
+
+  const handlePartyBRegistration = async () => {
+    if (!partyBForm.name || !partyBForm.email || !address || !agreementId)
+      return;
+
+    try {
+      const response = await fetch("/api/update-party-b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agreementId,
+          name: partyBForm.name,
+          email: partyBForm.email,
+          address,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to register Party B");
+
+      setCurrentStep("legalAcknowledgment");
+    } catch (error) {
+      console.error("Error registering Party B:", error);
+      setErrorMessage("Failed to register your information. Please try again.");
+    }
+  };
+
+  const hasInsufficientBalance = userBalance < requiredDeposit;
 
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-600">Loading agreement...</p>
+        <p className="text-gray-600">{loadingMessage}</p>
       </div>
     );
   }
@@ -363,86 +556,126 @@ const SignContractPage: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Agreement Signing Process
+            {isPartyA ? "Agreement Status" : "Agreement Signing Process"}
           </h1>
           <p className="text-gray-600">
-            Complete the blockchain signing and deposit process
+            {isPartyA
+              ? "View your agreement status (read-only)"
+              : "Complete the blockchain signing and deposit process"}
           </p>
         </div>
 
+        {/* Contract Content Display */}
+        {(ipfsContent || contractContent) && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 className="text-xl font-semibold mb-4 flex items-center">
+              <span className="bg-blue-100 p-2 rounded mr-3">📄</span>
+              Contract Content
+              {agreement?.cid && (
+                <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                  IPFS: {agreement.cid.slice(0, 8)}...
+                </span>
+              )}
+            </h2>
+            <div className="bg-gray-50 p-4 rounded-lg max-h-196 overflow-y-auto">
+              <div
+                className="prose max-w-none"
+                dangerouslySetInnerHTML={{
+                  __html: formatContractContent(
+                    ipfsContent || contractContent || ""
+                  ),
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Contract Info */}
-        {formattedContractState && (
+        {contractState && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-8">
             <h2 className="text-xl font-semibold mb-4">Contract Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="font-medium">Status:</span>{" "}
-                {STATUS_NAMES[formattedContractState.status]}
+                {STATUS_NAMES[contractState.status]}
               </div>
               <div>
-                <span className="font-medium">Your Deposit:</span>{" "}
-                {formatEther(requiredDeposit)} tokens
+                <span className="font-medium">Party B Deposit:</span>{" "}
+                {formatEther(contractState.depositB)} tokens
               </div>
-              <div className="md:col-span-2">
-                <span className="font-medium">Contract Address:</span>
-                <span className="font-mono text-xs ml-2">
-                  {agreement?.flowContractAddr}
+              <div className="flex items-center">
+                <span className="font-medium">Party A:</span>
+                <div className="ml-2">
+                  <AddressDisplay
+                    address={contractState.partyA}
+                    maxLength={16}
+                    clipboard={true}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="font-medium">Party B:</span>
+                <div className="ml-2">
+                  {contractState.partyB ===
+                  "0x0000000000000000000000000000000000000000" ? (
+                    <span className="text-gray-500 text-xs">Not assigned</span>
+                  ) : (
+                    <AddressDisplay
+                      address={contractState.partyB}
+                      maxLength={16}
+                      clipboard={true}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Read-only view for Party A */}
+        {currentStep === "readOnly" && (
+          <div className="bg-blue-50 rounded-lg shadow-md p-6 mb-8">
+            <h2 className="text-xl font-semibold mb-4 text-blue-800">
+              Creator View (Read-Only)
+            </h2>
+            <p className="text-blue-700 mb-4">
+              You are the creator of this agreement (Party A). You can view the
+              contract status but cannot sign as Party B.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="font-medium">Your Deposit Status:</span>
+                <span
+                  className={`ml-2 ${
+                    contractState?.partyAApproved
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {contractState?.partyAApproved ? "Approved" : "Pending"}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium">Party B Deposit Status:</span>
+                <span
+                  className={`ml-2 ${
+                    contractState?.partyBApproved
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {contractState?.partyBApproved ? "Approved" : "Pending"}
                 </span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Progress Steps */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            {[
-              "connect",
-              "checkContract",
-              "signContract",
-              "approveToken",
-              "approveDeposit",
-              "completed",
-            ].map((step, index) => (
-              <div key={step} className="flex items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    currentStep === step
-                      ? "bg-blue-500 text-white"
-                      : index <
-                        [
-                          "connect",
-                          "checkContract",
-                          "signContract",
-                          "approveToken",
-                          "approveDeposit",
-                          "completed",
-                        ].indexOf(currentStep)
-                      ? "bg-green-500 text-white"
-                      : "bg-gray-300 text-gray-600"
-                  }`}
-                >
-                  {index <
-                  [
-                    "connect",
-                    "checkContract",
-                    "signContract",
-                    "approveToken",
-                    "approveDeposit",
-                    "completed",
-                  ].indexOf(currentStep)
-                    ? "✓"
-                    : index + 1}
-                </div>
-                {index < 5 && <div className="w-8 h-1 bg-gray-300 mx-2"></div>}
-              </div>
-            ))}
-          </div>
-
-          {/* Step Content */}
-          <div className="text-center">
+        {/* Step Content for signers */}
+        {currentStep !== "readOnly" && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
             {currentStep === "connect" && (
-              <div>
+              <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4">
                   Connect Your Wallet
                 </h3>
@@ -454,10 +687,10 @@ const SignContractPage: React.FC = () => {
               </div>
             )}
 
-            {currentStep === "checkContract" && (
-              <div>
+            {currentStep === "loadingContract" && (
+              <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4">
-                  Checking Contract State
+                  Loading Contract State
                 </h3>
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
                 <p className="text-gray-600 mt-4">
@@ -466,70 +699,239 @@ const SignContractPage: React.FC = () => {
               </div>
             )}
 
-            {currentStep === "signContract" && (
-              <div>
-                <h3 className="text-lg font-semibold mb-4">
-                  Sign the Contract
-                </h3>
+            {currentStep === "displayContract" && (
+              <div className="text-center">
+                <h3 className="text-lg font-semibold mb-4">Review Agreement</h3>
                 <p className="text-gray-600 mb-6">
-                  Sign the contract to become Party B and proceed with the
-                  deposit process.
+                  Please review the contract content above. When ready, proceed
+                  to handle your deposit.
                 </p>
                 <button
-                  onClick={handleSignContract}
-                  disabled={isSignPending || isSignConfirming}
-                  className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setCurrentStep("approveToken")}
+                  className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600"
                 >
-                  {isSignPending || isSignConfirming
-                    ? "Signing..."
-                    : "Sign Contract"}
+                  Continue to Deposit
                 </button>
               </div>
             )}
 
             {currentStep === "approveToken" && (
-              <div>
+              <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4">
                   Approve Token Allowance
                 </h3>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 mb-4">
                   Approve {formatEther(requiredDeposit)} tokens to be used for
                   your deposit.
                 </p>
+
+                {/* Balance check */}
+                <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                  <div className="flex justify-between items-center text-sm">
+                    <span>Your Balance:</span>
+                    <span className="font-mono">
+                      {formatEther(userBalance)} tokens
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span>Required Deposit:</span>
+                    <span className="font-mono">
+                      {formatEther(requiredDeposit)} tokens
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-semibold mt-2">
+                    <span>Sufficient Balance:</span>
+                    <span
+                      className={
+                        hasInsufficientBalance
+                          ? "text-red-600"
+                          : "text-green-600"
+                      }
+                    >
+                      {hasInsufficientBalance ? "No" : "Yes"}
+                    </span>
+                  </div>
+                </div>
+
+                {hasInsufficientBalance ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                    <p className="text-red-700 text-sm">
+                      Insufficient balance to pay deposit (deposit:{" "}
+                      {formatEther(requiredDeposit)}, your balance:{" "}
+                      {formatEther(userBalance)}). Get more tokens.
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleApproveToken}
+                    disabled={isApprovePending || isApproveConfirming}
+                    className="bg-green-500 text-white py-3 px-6 rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isApprovePending || isApproveConfirming
+                      ? "Approving..."
+                      : "Approve Tokens"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {currentStep === "takeDeposits" && (
+              <div className="text-center">
+                <h3 className="text-lg font-semibold mb-4">Execute Deposit</h3>
+                <p className="text-gray-600 mb-6">
+                  Now execute the deposit transaction to lock your{" "}
+                  {formatEther(requiredDeposit)} tokens.
+                </p>
                 <button
-                  onClick={handleApproveToken}
-                  disabled={isApprovePending || isApproveConfirming}
-                  className="bg-green-500 text-white py-3 px-6 rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleTakeDeposits}
+                  disabled={isDepositsPending || isDepositsConfirming}
+                  className="bg-purple-500 text-white py-3 px-6 rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isApprovePending || isApproveConfirming
-                    ? "Approving..."
-                    : "Approve Tokens"}
+                  {isDepositsPending || isDepositsConfirming
+                    ? "Processing Deposit..."
+                    : "Execute Deposit"}
                 </button>
               </div>
             )}
 
-            {currentStep === "approveDeposit" && (
-              <div>
+            {currentStep === "registerPartyB" && (
+              <div className="max-w-md mx-auto">
+                <h3 className="text-lg font-semibold mb-4 text-center">
+                  Register Your Information
+                </h3>
+                <p className="text-gray-600 mb-6 text-center">
+                  Please provide your details to complete the registration as
+                  Party B.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={partyBForm.name}
+                      onChange={(e) =>
+                        setPartyBForm((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter your full name"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      value={partyBForm.email}
+                      onChange={(e) =>
+                        setPartyBForm((prev) => ({
+                          ...prev,
+                          email: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter your email address"
+                      required
+                    />
+                  </div>
+                  <button
+                    onClick={handlePartyBRegistration}
+                    disabled={!partyBForm.name || !partyBForm.email}
+                    className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Register Information
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {currentStep === "legalAcknowledgment" && (
+              <div className="max-w-2xl mx-auto">
+                <h3 className="text-lg font-semibold mb-4 text-center">
+                  Legal Acknowledgment
+                </h3>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <h4 className="font-semibold text-yellow-800 mb-2">
+                    Important Legal Notice
+                  </h4>
+                  <p className="text-yellow-700 text-sm mb-4">
+                    By signing this contract, you acknowledge that:
+                  </p>
+                  <ul className="text-yellow-700 text-sm space-y-1 list-disc list-inside">
+                    <li>
+                      You have read and understood the terms of this agreement
+                    </li>
+                    <li>You are legally bound by the terms once signed</li>
+                    <li>
+                      Your deposit will be locked according to the contract
+                      terms
+                    </li>
+                    <li>
+                      Disputes will be resolved according to the mediation
+                      process
+                    </li>
+                    <li>
+                      This action creates a legally enforceable obligation
+                    </li>
+                  </ul>
+                </div>
+                <div className="flex items-center mb-6">
+                  <input
+                    type="checkbox"
+                    id="legalAck"
+                    checked={legalAcknowledged}
+                    onChange={(e) => setLegalAcknowledged(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label
+                    htmlFor="legalAck"
+                    className="ml-2 text-sm text-gray-700"
+                  >
+                    I acknowledge that I understand the legal consequences of
+                    signing this contract
+                  </label>
+                </div>
+                <div className="text-center">
+                  <button
+                    onClick={() => setCurrentStep("signContract")}
+                    disabled={!legalAcknowledged}
+                    className="bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Proceed to Sign Contract
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {currentStep === "signContract" && (
+              <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4">
-                  Approve Your Deposit
+                  Sign the Contract
                 </h3>
                 <p className="text-gray-600 mb-6">
-                  Finalize your deposit approval to activate the agreement.
+                  Execute the final signature to complete your participation in
+                  this agreement.
                 </p>
                 <button
-                  onClick={handleApproveDeposit}
-                  disabled={isDepositPending || isDepositConfirming}
-                  className="bg-purple-500 text-white py-3 px-6 rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleSignContract}
+                  disabled={isSignPending || isSignConfirming}
+                  className="bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isDepositPending || isDepositConfirming
-                    ? "Approving Deposit..."
-                    : "Approve Deposit"}
+                  {isSignPending || isSignConfirming
+                    ? "Signing Contract..."
+                    : "Sign Contract"}
                 </button>
               </div>
             )}
 
             {currentStep === "completed" && (
-              <div>
+              <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4">
                   Process Complete!
                 </h3>
@@ -549,42 +951,59 @@ const SignContractPage: React.FC = () => {
                   </svg>
                 </div>
                 <p className="text-gray-600 mb-6">
-                  Your part of the signing and deposit process is complete.
-                  {formattedContractState?.status === 4
-                    ? " The agreement is now active!"
-                    : " Waiting for the other party to complete their part."}
+                  Your signing and deposit process is complete. The agreement is
+                  now active and your deposit has been locked.
                 </p>
                 <button
                   onClick={() => router.push(`/sign/${agreementId}/success`)}
                   className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600"
                 >
-                  Continue
+                  Continue to Success Page
                 </button>
               </div>
             )}
           </div>
-        </div>
+        )}
 
         {/* Transaction Hashes */}
-        {(signHash || approveHash || depositHash) && (
+        {(approveHash || depositsHash || signHash) && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold mb-4">Transaction History</h3>
-            <div className="space-y-2 text-sm font-mono">
-              {signHash && (
-                <div>
-                  <span className="font-normal">Sign Contract:</span> {signHash}
-                </div>
-              )}
+            <div className="space-y-2 text-sm">
               {approveHash && (
-                <div>
-                  <span className="font-normal">Token Approval:</span>{" "}
-                  {approveHash}
+                <div className="flex items-center">
+                  <span className="font-normal">Token Approval:</span>
+                  <div className="ml-2">
+                    <AddressDisplay
+                      address={approveHash}
+                      maxLength={20}
+                      clipboard={true}
+                    />
+                  </div>
                 </div>
               )}
-              {depositHash && (
-                <div>
-                  <span className="font-normal">Deposit Approval:</span>{" "}
-                  {depositHash}
+              {depositsHash && (
+                <div className="flex items-center">
+                  <span className="font-normal">Deposit Execution:</span>
+                  <div className="ml-2">
+                    <AddressDisplay
+                      address={depositsHash}
+                      maxLength={20}
+                      clipboard={true}
+                    />
+                  </div>
+                </div>
+              )}
+              {signHash && (
+                <div className="flex items-center">
+                  <span className="font-normal">Contract Signature:</span>
+                  <div className="ml-2">
+                    <AddressDisplay
+                      address={signHash}
+                      maxLength={20}
+                      clipboard={true}
+                    />
+                  </div>
                 </div>
               )}
             </div>

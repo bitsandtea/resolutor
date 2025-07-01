@@ -78,9 +78,16 @@ export async function POST(request: NextRequest) {
           agreementUpdates.flowContractAddr = contractAddr;
           agreementUpdates.flowFactoryTx = txHash;
         }
-      } else if (stepName === "contract_signing") {
-        agreementUpdates.contractSigned = true;
-        agreementUpdates.signedAt = new Date();
+      } else if (stepName === "sign_approve_token") {
+        newProcessStatus = "sign_approved";
+        newCurrentStep = "sign_contract";
+      } else if (stepName === "sign_contract") {
+        newProcessStatus = "sign_signed";
+        newCurrentStep = "sign_take_deposits";
+      } else if (stepName === "sign_take_deposits") {
+        newProcessStatus = "sign_completed";
+        newCurrentStep = "completed";
+        agreementUpdates.depositBPaid = true;
       }
 
       agreementUpdates.processStatus = newProcessStatus;

@@ -10,6 +10,8 @@ import { CONTRACT_ADDRESSES, MEDIATOR_ADDRESS, config } from "../wagmi";
 
 interface CreateAgreementParams {
   partyA: `0x${string}`;
+
+  partyB?: `0x${string}`; // Optional - if provided, will use createAndSignAgreement
   mediator: `0x${string}`; // Optional, will use default if not provided
   depositA: bigint;
   depositB: bigint;
@@ -114,12 +116,21 @@ export const useCreateAgreement = () => {
     }
 
     try {
+      // Always use createAndSignAgreement for optimized one-transaction flow
+      // Pass address(0) for partyB if unknown - they can join later via signContract
+      const partyBAddress =
+        params.partyB &&
+        params.partyB !== "0x0000000000000000000000000000000000000000"
+          ? params.partyB
+          : ("0x0000000000000000000000000000000000000000" as `0x${string}`);
+
       const sendParams = {
         address: CONTRACT_ADDRESSES.AGREEMENT_FACTORY,
         abi: AgreementFactoryABI,
-        functionName: "createAgreement",
+        functionName: "createAndSignAgreement",
         args: [
           params.partyA,
+          partyBAddress,
           params.mediator || MEDIATOR_ADDRESS,
           params.depositA,
           params.depositB,
@@ -127,6 +138,15 @@ export const useCreateAgreement = () => {
           CONTRACT_ADDRESSES.ACCESS_CONTROL,
         ],
       };
+
+      console.log(
+        `Using createAndSignAgreement - Create and Sign in one transaction!${
+          partyBAddress === "0x0000000000000000000000000000000000000000"
+            ? " (PartyB will join later)"
+            : " (Both parties known)"
+        }`
+      );
+
       // Create the agreement using AgreementFactory
       const agreementResult = await writeContract(sendParams);
 

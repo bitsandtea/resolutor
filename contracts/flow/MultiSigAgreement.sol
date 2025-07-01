@@ -121,10 +121,41 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         require(agreement.partyB == address(0), "Party B already set");
         require(msg.sender != agreement.partyA && msg.sender != agreement.mediator, "Party A or mediator cannot be party B");
 
-        agreement.partyB = msg.sender;
-        agreement.status = Status.Signed;
+        _setPartyBAndSign(msg.sender);
+    }
 
-        emit ContractSigned(msg.sender);
+    function signContractWithPartyB(address _partyB) external nonReentrant {
+        require(agreement.status == Status.Created, "Contract already signed or invalid status");
+        require(agreement.partyB == address(0), "Party B already set");
+        require(_partyB != agreement.partyA && _partyB != agreement.mediator, "Party B cannot be party A or mediator");
+        require(_partyB != address(0), "Invalid party B address");
+
+        _setPartyBAndSign(_partyB);
+    }
+
+    function _setPartyBAndSign(address _partyB) private {
+        agreement.partyB = _partyB;
+        
+        // Automatically approve parties with zero deposits
+        if (agreement.depositA == 0) {
+            agreement.partyAApproved = true;
+        }
+        if (agreement.depositB == 0) {
+            agreement.partyBApproved = true;
+        }
+        
+        // Set status based on whether deposits are needed
+        bool partyAReady = agreement.partyAApproved || agreement.depositA == 0;
+        bool partyBReady = agreement.partyBApproved || agreement.depositB == 0;
+        
+        if (partyAReady && partyBReady) {
+            agreement.status = Status.FullDeposit;
+            emit DepositsReady();
+        } else {
+            agreement.status = Status.Signed;
+        }
+
+        emit ContractSigned(_partyB);
     }
 
     function approveDeposit() external nonReentrant onlyPartyAOrB onlyWhenSigned {
@@ -132,18 +163,25 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         
         if (msg.sender == agreement.partyA) {
             require(!agreement.partyAApproved, "Party A already approved");
-            require(token.allowance(agreement.partyA, address(this)) >= agreement.depositA, "Insufficient allowance from party A");
+            if (agreement.depositA > 0) {
+                require(token.allowance(agreement.partyA, address(this)) >= agreement.depositA, "Insufficient allowance from party A");
+            }
             agreement.partyAApproved = true;
             emit PartyApproved(agreement.partyA);
         } else if (msg.sender == agreement.partyB) {
             require(!agreement.partyBApproved, "Party B already approved");
-            require(token.allowance(agreement.partyB, address(this)) >= agreement.depositB, "Insufficient allowance from party B");
+            if (agreement.depositB > 0) {
+                require(token.allowance(agreement.partyB, address(this)) >= agreement.depositB, "Insufficient allowance from party B");
+            }
             agreement.partyBApproved = true;
             emit PartyApproved(agreement.partyB);
         }
 
-        // Update status based on approvals
-        if (agreement.partyAApproved && agreement.partyBApproved) {
+        // Check if all required approvals are complete
+        bool partyAReady = agreement.partyAApproved || agreement.depositA == 0;
+        bool partyBReady = agreement.partyBApproved || agreement.depositB == 0;
+        
+        if (partyAReady && partyBReady) {
             agreement.status = Status.FullDeposit;
             emit DepositsReady();
         } else if (agreement.partyAApproved || agreement.partyBApproved) {
@@ -152,12 +190,20 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     }
 
     function takeDeposits() external nonReentrant onlyWhenSigned {
-        require(agreement.status == Status.FullDeposit, "Both parties must approve first");
-        require(agreement.partyAApproved && agreement.partyBApproved, "Both parties must have approved");
+        require(agreement.status == Status.FullDeposit, "All required parties must approve first");
+        
+        // Validate that all parties with deposits have approved
+        bool partyAReady = agreement.partyAApproved || agreement.depositA == 0;
+        bool partyBReady = agreement.partyBApproved || agreement.depositB == 0;
+        require(partyAReady && partyBReady, "All parties with deposits must have approved");
 
-        // Take deposits from both parties
-        token.safeTransferFrom(agreement.partyA, address(this), agreement.depositA);
-        token.safeTransferFrom(agreement.partyB, address(this), agreement.depositB);
+        // Take deposits only from parties with non-zero amounts
+        if (agreement.depositA > 0) {
+            token.safeTransferFrom(agreement.partyA, address(this), agreement.depositA);
+        }
+        if (agreement.depositB > 0) {
+            token.safeTransferFrom(agreement.partyB, address(this), agreement.depositB);
+        }
 
         agreement.status = Status.Active;
         

@@ -150,10 +150,7 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
                           </a>
                         </>
                       )}
-                      {stepName === "contract_signing" &&
-                        deploymentState.contractSigned && (
-                          <p className="text-green-600">✅ Contract Signed</p>
-                        )}
+
                       {stepName === "flow_deploy" &&
                         deploymentState.flowContractAddr && (
                           <p className="text-green-600">

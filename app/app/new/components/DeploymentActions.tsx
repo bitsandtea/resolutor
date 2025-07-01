@@ -80,6 +80,11 @@ const DeploymentActions: React.FC<DeploymentActionsProps> = ({
                     nextPendingStep as keyof typeof stepDefinitions
                   ]?.title
                 }
+                {nextPendingStep === "flow_deploy" && (
+                  <span className="block text-xs text-blue-600 mt-1">
+                    ✨ Using optimized one-transaction deployment!
+                  </span>
+                )}
               </p>
             </div>
             <button
@@ -98,6 +103,8 @@ const DeploymentActions: React.FC<DeploymentActionsProps> = ({
               // isGrantingAccess ||
               isTxPending ? (
                 <>⏳ Processing...</>
+              ) : nextPendingStep === "flow_deploy" ? (
+                <>🚀 Create & Sign Agreement</>
               ) : (
                 <>🚀 Execute Next Step</>
               )}

@@ -421,8 +421,7 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
               // Show confirmation for single-party contracts
               if (otherSigners.length === 0) {
                 const confirmed = confirm(
-                  "⚠️ You're creating a single-party contract with no other signers.\n\n" +
-                    "This means only you will sign this contract. Is this correct?\n\n" +
+                  "This means only you will sign this contract. Is this correct?\n\n" +
                     "Click OK to proceed with single-party contract, or Cancel to add more signers."
                 );
                 if (!confirmed) {
@@ -447,10 +446,10 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
           }`}
         >
           {isLoading
-            ? "Creating Contract..."
+            ? "Creating & Signing..."
             : otherSigners.length === 0
-            ? "Create Single-Party Contract"
-            : "Create Multi-Party Contract"}
+            ? "Create & Sign Agreement"
+            : "Create & Sign Agreement"}
         </button>
       </div>
     </div>

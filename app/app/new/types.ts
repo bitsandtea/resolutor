@@ -99,7 +99,6 @@ export type ProcessStatus =
 export type DeploymentStepName =
   | "db_save"
   | "ipfs_upload"
-  | "contract_signing"
   | "filecoin_access_deploy"
   | "filecoin_storage_deploy"
   | "flow_deploy";

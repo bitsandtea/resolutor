@@ -11,7 +11,6 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 2. filecoin_access_deploy 🔐 Deploy Access Control
 3. filecoin_store_file   💾 Store File on Filecoin
 4. flow_deploy           ⚡ Deploy Flow Contract
-5. contract_signing      ✍️ Sign Contract
 ```
 
 ## Step Details
@@ -151,37 +150,6 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 - Wallet errors: retry mechanism with user guidance
 - Insufficient funds: clear error message
 - Network congestion: automatic retry
-
----
-
-### 5. Contract Signing (`contract_signing`) ✍️
-
-**Purpose**: Digitally sign the contract content before blockchain deployment
-
-**What happens**:
-
-- Creates a cryptographic signature of the contract content
-- Associates signature with the agreement ID
-- Prepares contract for immutable blockchain deployment
-- Updates contract status to "signed"
-
-**Requirements**:
-
-- Completed IPFS upload (CID available)
-- Valid agreement ID
-- Contract content integrity
-
-**Output**:
-
-- Digital signature
-- Signed contract metadata
-- Updated agreement status
-
-**Error handling**:
-
-- Missing CID blocks execution
-- Invalid agreement ID throws error
-- Signature failure retries with user notification
 
 ---
 
