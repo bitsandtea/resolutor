@@ -118,6 +118,8 @@ export type ProcessStatus =
   | "draft"
   | "db_saved"
   | "ipfs_uploaded"
+  | "filecoin_access_deployed"
+  | "filecoin_stored"
   | "filecoin_deployed"
   | "flow_deployed"
   | "completed"

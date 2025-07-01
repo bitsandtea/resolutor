@@ -1,17 +1,17 @@
+import { CONTRACT_ADDRESSES } from "@/lib/chain-config";
 import { useCreateAccessControl } from "@/lib/storage/createAccess";
 import { useCreateAgreement } from "@/lib/storage/createStorage";
+import { config } from "@/lib/wagmi";
 import {
   BlockchainDeploymentState,
   DeploymentStepName,
   DeploymentStepStatus,
 } from "@/types";
+import { switchChain } from "@wagmi/core";
 import { useEffect, useState } from "react";
 import { parseEther } from "viem";
 import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
 import { stepDefinitions, stepOrder } from "./deploymentSteps";
-
-import { config, CONTRACT_ADDRESSES } from "@/lib/wagmi";
-import { switchChain } from "@wagmi/core";
 
 // Chain requirements for each deployment step
 const STEP_CHAIN_REQUIREMENTS: Record<DeploymentStepName, number | null> = {
@@ -22,7 +22,9 @@ const STEP_CHAIN_REQUIREMENTS: Record<DeploymentStepName, number | null> = {
   filecoin_store_file: Number(
     process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
   ),
-  flow_deploy: Number(process.env.NEXT_PUBLIC_FLOW_CHAIN_ID || "747"), // Flow Testnet
+  flow_deploy: Number(
+    process.env.NEXT_PUBLIC_FLOW_EVM_TESTNET_CHAIN_ID || "545"
+  ), // Flow Testnet
   db_save: null, // No specific chain required
 };
 
@@ -135,10 +137,28 @@ export const useDeployment = ({
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
   const [lastPolledTime, setLastPolledTime] = useState<number>(0);
 
-  const { isLoading: isTxPending, isSuccess: isTxSuccess } =
-    useWaitForTransactionReceipt({
-      hash: (accessTxHash || flowTxHash || pendingTxHash) as `0x${string}`,
-    });
+  const { isLoading: isTxPending } = useWaitForTransactionReceipt({
+    hash: (accessTxHash || flowTxHash || pendingTxHash) as `0x${string}`,
+    query: { enabled: !!(accessTxHash || flowTxHash || pendingTxHash) },
+  });
+
+  // Separate transaction tracking for each step
+  const { isSuccess: isAccessTxSuccess } = useWaitForTransactionReceipt({
+    hash: accessTxHash as `0x${string}`,
+    query: {
+      enabled: !!accessTxHash && currentStep === "filecoin_access_deploy",
+    },
+  });
+
+  const { isSuccess: isStoreTxSuccess } = useWaitForTransactionReceipt({
+    hash: flowTxHash as `0x${string}`,
+    query: { enabled: !!flowTxHash && currentStep === "filecoin_store_file" },
+  });
+
+  const { isSuccess: isFlowDeploySuccess } = useWaitForTransactionReceipt({
+    hash: flowTxHash as `0x${string}`,
+    query: { enabled: !!flowTxHash && currentStep === "flow_deploy" },
+  });
 
   const updateDeploymentStep = async (
     stepName: string,
@@ -251,17 +271,7 @@ export const useDeployment = ({
           body: JSON.stringify(requestPayload),
         });
       } else if (stepName === "filecoin_access_deploy") {
-        if (
-          chainId !==
-          Number(process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID)
-        ) {
-          console.log("Switching chain to Filecoin Calibration Chain");
-          await switchChain(config, {
-            chainId: Number(
-              process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
-            ) as 314159,
-          });
-        }
+        // Chain switching is now handled automatically after step completion
 
         if (!isConnected || !address) {
           throw new Error(
@@ -279,28 +289,9 @@ export const useDeployment = ({
             process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || ""
           );
 
-          // Update database with the predefined ACCESS_CONTROL_ADDRESS
-          const updateResponse = await fetch("/api/update-deployment-step", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              agreementId,
-              stepName: "filecoin_access_deploy",
-              status: "completed",
-              contractAddr: process.env.NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS,
-            }),
-          });
-
-          if (!updateResponse.ok) {
-            console.error("Failed to update filecoin access control address");
-          }
-
-          // Handle step completion and chain switching for next step
-          await handleStepCompletion(
-            "filecoin_access_deploy",
-            chainId,
-            onError
-          );
+          // Don't mark as completed here - let the useEffect handle transaction confirmation
+          // The transaction success will be handled by the useEffect that watches isAccessTxSuccess
+          setIsProcessing(false); // Allow manual progression while waiting for confirmation
 
           return { success: true, txHash: "pending" };
         } catch (walletError) {
@@ -314,19 +305,7 @@ export const useDeployment = ({
           throw new Error(`Wallet transaction failed: ${walletError}`);
         }
       } else if (stepName === "filecoin_store_file") {
-        if (
-          chainId !==
-          Number(process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID)
-        ) {
-          console.log(
-            "Switching chain to Filecoin Calibration Chain for file storage"
-          );
-          await switchChain(config, {
-            chainId: Number(
-              process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
-            ) as 314159,
-          });
-        }
+        // Chain switching is now handled automatically after step completion
 
         if (!isConnected || !address) {
           throw new Error(
@@ -346,30 +325,20 @@ export const useDeployment = ({
         await updateDeploymentStep("filecoin_store_file", "in_progress");
 
         try {
+          console.log("Storing file in useDeployment", {
+            fileCid: currentStatus.currentState.cid,
+            agreementId: agreementId,
+          });
+
           await storeFile({
             fileCid: currentStatus.currentState.cid,
             agreementId: agreementId,
           });
 
-          // Update database to mark step as completed
-          const updateResponse = await fetch("/api/update-deployment-step", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              agreementId,
-              stepName: "filecoin_store_file",
-              status: "completed",
-            }),
-          });
+          // The transaction hash will be available via flowTxHash from the shared writeContract hook
+          // The useEffect below will handle updating the step with the transaction hash
 
-          if (!updateResponse.ok) {
-            console.error("Failed to update filecoin store file step");
-          }
-
-          // Handle step completion and chain switching for next step
-          await handleStepCompletion("filecoin_store_file", chainId, onError);
-
-          // Stop processing to allow manual progression
+          // Don't mark as completed here - let the useEffect handle transaction confirmation
           setIsProcessing(false);
 
           return { success: true, txHash: "pending" };
@@ -398,6 +367,14 @@ export const useDeployment = ({
             undefined,
             displayError
           );
+
+          // Ensure retry state is set
+          setIsProcessing(false);
+          setCanRetry(true);
+
+          // Force refresh deployment status to show failed state
+          await checkDeploymentStatus(true);
+
           throw new Error(displayError);
         }
       } else if (stepName === "flow_deploy") {
@@ -454,16 +431,18 @@ export const useDeployment = ({
               (process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS as `0x${string}`) || "",
             depositA: parseEther(depositA.toString()),
             depositB: parseEther(depositB.toString()),
-            token: CONTRACT_ADDRESSES.MOCK_ERC20,
+            token: CONTRACT_ADDRESSES[545].MOCK_ERC20,
             filecoinAccessControl:
               (process.env
-                .NEXT_PUBLIC_FILECOIN_ACCESS_CONTROL as `0x${string}`) || "",
+                .NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS as `0x${string}`) || "",
           };
+
+          console.log("createParams", createParams);
 
           await createAgreement(createParams);
 
           // Don't return immediately - let the useEffect handle transaction completion
-          // The transaction success will be handled by the useEffect that watches isFlowSuccess
+          // The transaction success will be handled by the useEffect that watches isFlowDeploySuccess
           return;
         } catch (walletError) {
           throw new Error(`Wallet transaction failed: ${walletError}`);
@@ -565,6 +544,19 @@ export const useDeployment = ({
       const status = await checkDeploymentStatus();
 
       if (status && status.nextStep) {
+        // Check and switch to required chain before executing step
+        const switchSuccess = await checkAndSwitchChainForStep(
+          status.nextStep as DeploymentStepName,
+          chainId
+        );
+
+        if (!switchSuccess) {
+          onError(
+            `Failed to switch to required chain for step: ${status.nextStep}`
+          );
+          return;
+        }
+
         if (status.currentState?.deploymentSteps) {
           const existingStep = status.currentState.deploymentSteps.find(
             (step: any) =>
@@ -580,6 +572,20 @@ export const useDeployment = ({
             });
 
             if (nextIncompleteStep) {
+              // Check and switch chain for the incomplete step as well
+              const incompleteStepSwitchSuccess =
+                await checkAndSwitchChainForStep(
+                  nextIncompleteStep as DeploymentStepName,
+                  chainId
+                );
+
+              if (!incompleteStepSwitchSuccess) {
+                onError(
+                  `Failed to switch to required chain for step: ${nextIncompleteStep}`
+                );
+                return;
+              }
+
               await executeStep(nextIncompleteStep as DeploymentStepName);
             } else {
               setCurrentStep("completed");
@@ -690,6 +696,15 @@ export const useDeployment = ({
     ) {
       return "completed";
     }
+
+    // For filecoin_store_file, check if the process status indicates it's completed
+    if (
+      stepName === "filecoin_store_file" &&
+      deploymentState.processStatus === "filecoin_stored"
+    ) {
+      return "completed";
+    }
+
     if (stepName === "flow_deploy" && deploymentState.flowContractAddr) {
       return "completed";
     }
@@ -725,33 +740,75 @@ export const useDeployment = ({
         "in_progress",
         accessTxHash
       );
+      // Force refresh to show transaction hash immediately
+      checkDeploymentStatus(true);
     }
   }, [accessTxHash, currentStep]);
 
-  // Handle when flow transaction hash becomes available
+  // Handle when flow transaction hash becomes available (both flow_deploy and filecoin_store_file)
   useEffect(() => {
     if (flowTxHash && currentStep === "flow_deploy") {
       updateDeploymentStep("flow_deploy", "in_progress", flowTxHash);
+      // Force refresh to show transaction hash immediately
+      checkDeploymentStatus(true);
+    }
+  }, [flowTxHash, currentStep]);
+
+  // Handle when storeFile transaction hash becomes available
+  useEffect(() => {
+    if (flowTxHash && currentStep === "filecoin_store_file") {
+      updateDeploymentStep("filecoin_store_file", "in_progress", flowTxHash);
+      // Force refresh to show transaction hash immediately
+      checkDeploymentStatus(true);
     }
   }, [flowTxHash, currentStep]);
 
   // Handle access control transaction confirmation
   useEffect(() => {
     if (
-      isTxSuccess &&
+      isAccessTxSuccess &&
       accessTxHash &&
       currentStep === "filecoin_access_deploy"
     ) {
-      // Update step as completed
-      updateDeploymentStep("filecoin_access_deploy", "completed", accessTxHash);
+      // Update step as completed with contract address
+      updateDeploymentStep(
+        "filecoin_access_deploy",
+        "completed",
+        accessTxHash,
+        process.env.NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS
+      );
 
       // Handle step completion and chain switching for next step
       handleStepCompletion("filecoin_access_deploy", chainId, onError);
 
-      // Stop processing to allow manual progression
-      setIsProcessing(false);
+      // Refresh deployment status to show the success
+      setTimeout(async () => {
+        await checkDeploymentStatus(true);
+        setIsProcessing(false);
+      }, 1000);
     }
-  }, [isTxSuccess, accessTxHash, currentStep, chainId, onError]);
+  }, [isAccessTxSuccess, accessTxHash, currentStep, chainId, onError]);
+
+  // Handle storeFile transaction confirmation
+  useEffect(() => {
+    if (
+      isStoreTxSuccess &&
+      flowTxHash &&
+      currentStep === "filecoin_store_file"
+    ) {
+      // Update step as completed
+      updateDeploymentStep("filecoin_store_file", "completed", flowTxHash);
+
+      // Handle step completion and chain switching for next step
+      handleStepCompletion("filecoin_store_file", chainId, onError);
+
+      // Refresh deployment status to show the success
+      setTimeout(async () => {
+        await checkDeploymentStatus(true);
+        setIsProcessing(false);
+      }, 1000);
+    }
+  }, [isStoreTxSuccess, flowTxHash, currentStep, chainId, onError]);
 
   // Handle access control errors
   useEffect(() => {
@@ -769,9 +826,25 @@ export const useDeployment = ({
     }
   }, [accessError, currentStep]);
 
+  // Handle storeFile errors
+  useEffect(() => {
+    if (createError && currentStep === "filecoin_store_file") {
+      updateDeploymentStep(
+        "filecoin_store_file",
+        "failed",
+        flowTxHash || undefined,
+        undefined,
+        createError.message
+      );
+      setIsProcessing(false);
+      setCanRetry(true);
+      onError(`File storage failed: ${createError.message}`);
+    }
+  }, [createError, currentStep, flowTxHash]);
+
   // Handle flow transaction confirmation
   useEffect(() => {
-    if (isFlowSuccess && flowTxHash && currentStep === "flow_deploy") {
+    if (isFlowDeploySuccess && flowTxHash && currentStep === "flow_deploy") {
       // Update step as completed with contract address
       updateDeploymentStep(
         "flow_deploy",
@@ -801,7 +874,7 @@ export const useDeployment = ({
       }, 2000);
     }
   }, [
-    isFlowSuccess,
+    isFlowDeploySuccess,
     flowTxHash,
     currentStep,
     flowContractAddress,
@@ -883,6 +956,14 @@ export const useDeployment = ({
     }
 
     try {
+      // Check and switch to required chain before retrying step
+      const switchSuccess = await checkAndSwitchChainForStep(stepName, chainId);
+
+      if (!switchSuccess) {
+        onError(`Failed to switch to required chain for step: ${stepName}`);
+        return;
+      }
+
       // Reset the failed step to pending first
       await updateDeploymentStep(stepName, "pending");
 

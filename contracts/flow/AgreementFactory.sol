@@ -85,10 +85,9 @@ contract AgreementFactory {
         if (_partyB != address(0)) {
             // Both parties known - sign with partyB immediately
             MultiSigAgreement(newAgreement).signContractWithPartyB(_partyB);
-        } else {
-            // Only partyA known - partyA signs as themselves, partyB joins later
-            MultiSigAgreement(newAgreement).signContract();
         }
+        // If _partyB is zero address, don't sign - leave contract in Created status
+        // PartyB will sign later by calling signContract() directly on the agreement
 
         // Track the new agreement
         agreements.push(newAgreement);

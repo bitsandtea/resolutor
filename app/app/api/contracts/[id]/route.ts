@@ -37,13 +37,29 @@ export async function GET(
     }
 
     // 2. Read the contract content from the local file
-    // The file was saved as [agreementId].md in the save-contract endpoint
-    const localFilePath = path.join(contractsDir, `${agreement.id}.md`);
+    // The file was saved as [agreementId]-[timestamp].md in the save-contract endpoint
     let content = "";
     try {
+      // Find files matching the pattern [agreementId]-*.md
+      const files = await fs.readdir(contractsDir);
+      const matchingFiles = files.filter(
+        (file) => file.startsWith(`${agreement.id}-`) && file.endsWith(".md")
+      );
+
+      if (matchingFiles.length === 0) {
+        throw new Error(`No contract file found for agreement ${agreement.id}`);
+      }
+
+      // Get the most recent file (lexicographically, which works for ISO timestamps)
+      const latestFile = matchingFiles.sort().reverse()[0];
+      const localFilePath = path.join(contractsDir, latestFile);
+
       content = await fs.readFile(localFilePath, "utf8");
     } catch (fileError) {
-      console.error(`Error reading contract file ${localFilePath}:`, fileError);
+      console.error(
+        `Error reading contract file for agreement ${agreement.id}:`,
+        fileError
+      );
       // If the file isn't found, it's a critical issue as it should have been saved.
       // However, we can still return the agreement details from DB if needed,
       // or decide this is a hard error for content retrieval.

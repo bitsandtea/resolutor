@@ -711,12 +711,7 @@ export const MultiSigAgreementABI = [
     name: "ContractSigned",
     type: "event",
   },
-  {
-    anonymous: false,
-    inputs: [],
-    name: "DepositsReady",
-    type: "event",
-  },
+
   {
     anonymous: false,
     inputs: [
@@ -1113,13 +1108,7 @@ export const MultiSigAgreementABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-  {
-    inputs: [],
-    name: "takeDeposits",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
+
   {
     inputs: [],
     name: "token",

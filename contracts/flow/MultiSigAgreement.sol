@@ -11,12 +11,10 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
 
     enum Status { 
         Created,        // 0 - Contract created, party B unknown
-        Signed,         // 1 - Party B has signed, both parties known
-        PartialDeposit, // 2 - One party has given allowance/deposit
-        FullDeposit,    // 3 - Both parties have allowances, deposits can be taken
-        Active,         // 4 - Deposits taken, agreement active
-        Disputed,       // 5 - Dispute opened
-        Resolved        // 6 - Final resolution executed
+        Signed,         // 1 - Party B has signed, deposits may still be pending
+        Active,         // 2 - All required deposits taken, agreement active
+        Disputed,       // 3 - Dispute opened
+        Resolved        // 4 - Final resolution executed
     }
 
     struct Proposal {
@@ -49,7 +47,6 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     event AgreementCreated(address indexed contractAddr, address indexed partyA);
     event ContractSigned(address indexed partyB);
     event PartyApproved(address indexed party);
-    event DepositsReady();
     event DepositsTaken(uint256 amountA, uint256 amountB);
     event Activated();
     event DisputeOpened(address indexed opener);
@@ -113,6 +110,16 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
         token = IERC20(_token);
         creationTimestamp = block.timestamp;
 
+        // Take party A's deposit immediately if they have sufficient allowance
+        if (_depositA > 0 && token.allowance(_partyA, address(this)) >= _depositA) {
+            token.safeTransferFrom(_partyA, address(this), _depositA);
+            agreement.partyAApproved = true;
+            emit PartyApproved(_partyA);
+            emit DepositsTaken(_depositA, 0);
+        } else if (_depositA == 0) {
+            agreement.partyAApproved = true;
+        }
+
         emit AgreementCreated(address(this), _partyA);
     }
 
@@ -136,21 +143,30 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     function _setPartyBAndSign(address _partyB) private {
         agreement.partyB = _partyB;
         
-        // Automatically approve parties with zero deposits
-        if (agreement.depositA == 0) {
-            agreement.partyAApproved = true;
-        }
-        if (agreement.depositB == 0) {
+        // Take party B's deposit immediately if they're signing themselves and have sufficient allowance
+        if (msg.sender == _partyB && agreement.depositB > 0) {
+            if (token.allowance(_partyB, address(this)) >= agreement.depositB) {
+                token.safeTransferFrom(_partyB, address(this), agreement.depositB);
+                agreement.partyBApproved = true;
+                emit PartyApproved(_partyB);
+                emit DepositsTaken(0, agreement.depositB);
+            }
+        } else if (agreement.depositB == 0) {
             agreement.partyBApproved = true;
         }
         
-        // Set status based on whether deposits are needed
-        bool partyAReady = agreement.partyAApproved || agreement.depositA == 0;
-        bool partyBReady = agreement.partyBApproved || agreement.depositB == 0;
+        // Auto-approve party A if they have no deposit
+        if (agreement.depositA == 0) {
+            agreement.partyAApproved = true;
+        }
+        
+        // Check if contract should be activated
+        bool partyAReady = agreement.partyAApproved;
+        bool partyBReady = agreement.partyBApproved;
         
         if (partyAReady && partyBReady) {
-            agreement.status = Status.FullDeposit;
-            emit DepositsReady();
+            agreement.status = Status.Active;
+            emit Activated();
         } else {
             agreement.status = Status.Signed;
         }
@@ -159,12 +175,14 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     }
 
     function approveDeposit() external nonReentrant onlyPartyAOrB onlyWhenSigned {
-        require(agreement.status == Status.Signed || agreement.status == Status.PartialDeposit, "Invalid status for approval");
+        require(agreement.status == Status.Signed, "Invalid status for approval");
         
         if (msg.sender == agreement.partyA) {
             require(!agreement.partyAApproved, "Party A already approved");
             if (agreement.depositA > 0) {
                 require(token.allowance(agreement.partyA, address(this)) >= agreement.depositA, "Insufficient allowance from party A");
+                token.safeTransferFrom(agreement.partyA, address(this), agreement.depositA);
+                emit DepositsTaken(agreement.depositA, 0);
             }
             agreement.partyAApproved = true;
             emit PartyApproved(agreement.partyA);
@@ -172,44 +190,24 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
             require(!agreement.partyBApproved, "Party B already approved");
             if (agreement.depositB > 0) {
                 require(token.allowance(agreement.partyB, address(this)) >= agreement.depositB, "Insufficient allowance from party B");
+                token.safeTransferFrom(agreement.partyB, address(this), agreement.depositB);
+                emit DepositsTaken(0, agreement.depositB);
             }
             agreement.partyBApproved = true;
             emit PartyApproved(agreement.partyB);
         }
 
-        // Check if all required approvals are complete
-        bool partyAReady = agreement.partyAApproved || agreement.depositA == 0;
-        bool partyBReady = agreement.partyBApproved || agreement.depositB == 0;
+        // Check if contract should be activated
+        bool partyAReady = agreement.partyAApproved;
+        bool partyBReady = agreement.partyBApproved;
         
         if (partyAReady && partyBReady) {
-            agreement.status = Status.FullDeposit;
-            emit DepositsReady();
-        } else if (agreement.partyAApproved || agreement.partyBApproved) {
-            agreement.status = Status.PartialDeposit;
+            agreement.status = Status.Active;
+            emit Activated();
         }
     }
 
-    function takeDeposits() external nonReentrant onlyWhenSigned {
-        require(agreement.status == Status.FullDeposit, "All required parties must approve first");
-        
-        // Validate that all parties with deposits have approved
-        bool partyAReady = agreement.partyAApproved || agreement.depositA == 0;
-        bool partyBReady = agreement.partyBApproved || agreement.depositB == 0;
-        require(partyAReady && partyBReady, "All parties with deposits must have approved");
 
-        // Take deposits only from parties with non-zero amounts
-        if (agreement.depositA > 0) {
-            token.safeTransferFrom(agreement.partyA, address(this), agreement.depositA);
-        }
-        if (agreement.depositB > 0) {
-            token.safeTransferFrom(agreement.partyB, address(this), agreement.depositB);
-        }
-
-        agreement.status = Status.Active;
-        
-        emit DepositsTaken(agreement.depositA, agreement.depositB);
-        emit Activated();
-    }
 
     function openDispute() external nonReentrant onlyPartyAOrB onlyWhenSigned {
         require(agreement.status == Status.Active, "Agreement must be active");
@@ -255,7 +253,7 @@ contract MultiSigAgreement is ReentrancyGuard, Initializable {
     }
 
     function refundExpired() external nonReentrant {
-        require(agreement.status == Status.Created || agreement.status == Status.Signed || agreement.status == Status.PartialDeposit, "Invalid status for refund");
+        require(agreement.status == Status.Created || agreement.status == Status.Signed, "Invalid status for refund");
         require(block.timestamp >= creationTimestamp + DEPOSIT_TIMEOUT, "Timeout not reached");
 
         agreement.status = Status.Resolved;

@@ -42,27 +42,28 @@ async function main() {
   console.log("Factory address:", factoryAddress);
   console.log("Implementation address:", implementationAddress);
 
-  console.log("\nDeploying Mock USDC token...");
-  const MockToken = await hre.ethers.getContractFactory("MockERC20");
-  const mockUSDC = await MockToken.deploy("Flow USDC", "FUSDC");
-  await mockUSDC.waitForDeployment();
+  // console.log("\nDeploying Mock USDC token...");
+  // const MockToken = await hre.ethers.getContractFactory("MockERC20");
+  // const mockUSDC = await MockToken.deploy("Flow USDC", "FUSDC");
+  // await mockUSDC.waitForDeployment();
 
-  const mockUSDCAddress = await mockUSDC.getAddress();
-  console.log("Mock USDC deployed to:", mockUSDCAddress);
+  // const mockUSDCAddress = await mockUSDC.getAddress();
+  // const mockUSDCAddress = await mockUSDC.getAddress();
+  // console.log("Mock USDC deployed to:", mockUSDCAddress);
 
-  // Mint 100M tokens to deployer
-  console.log("Minting 100M tokens to deployer...");
-  await mockUSDC.mintToSelf();
-  const balance = await mockUSDC.balanceOf(deployer.address);
-  console.log(
-    "Deployer token balance:",
-    hre.ethers.formatEther(balance),
-    "FUSDC"
-  );
+  // // Mint 100M tokens to deployer
+  // console.log("Minting 100M tokens to deployer...");
+  // await mockUSDC.mintToSelf();
+  // const balance = await mockUSDC.balanceOf(deployer.address);
+  // console.log(
+  //   "Deployer token balance:",
+  //   hre.ethers.formatEther(balance),
+  //   "FUSDC"
+  // );
 
-  // Verify Mock USDC
-  console.log("Verifying Mock USDC...");
-  await verifyContract(mockUSDCAddress, ["Flow USDC", "FUSDC"]);
+  // // Verify Mock USDC
+  // console.log("Verifying Mock USDC...");
+  // await verifyContract(mockUSDCAddress, ["Flow USDC", "FUSDC"]);
 }
 
 main()

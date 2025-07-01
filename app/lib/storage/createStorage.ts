@@ -91,14 +91,33 @@ export const useCreateAgreement = () => {
       const storeFileParams = {
         address: CONTRACT_ADDRESSES.ACCESS_CONTROL,
         abi: AccessControlABI,
+        chainId: Number(
+          process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
+        ) as 314159,
         functionName: "storeFile",
         args: [params.fileCid, params.agreementId],
       };
+      console.log("Storing file in createStorage", storeFileParams);
 
       const storeFileResult = await writeContract(storeFileParams);
       return storeFileResult;
     } catch (error) {
       console.error("Error storing file:", error);
+      // Re-throw the error with a more descriptive message
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (
+        errorMessage.includes("execution reverted") ||
+        errorMessage.includes("reverted")
+      ) {
+        throw new Error(
+          "Contract execution failed: The file may already exist or access control failed"
+        );
+      } else if (errorMessage.includes("User rejected")) {
+        throw new Error("Transaction rejected by user");
+      } else if (errorMessage.includes("insufficient funds")) {
+        throw new Error("Insufficient funds for transaction");
+      }
       throw error;
     }
   };
@@ -144,7 +163,8 @@ export const useCreateAgreement = () => {
           partyBAddress === "0x0000000000000000000000000000000000000000"
             ? " (PartyB will join later)"
             : " (Both parties known)"
-        }`
+        }`,
+        sendParams
       );
 
       // Create the agreement using AgreementFactory

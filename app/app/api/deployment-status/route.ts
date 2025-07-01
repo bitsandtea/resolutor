@@ -78,6 +78,10 @@ export async function GET(request: NextRequest) {
       nextStep = "ipfs_upload";
     } else if (agreement.processStatus === "ipfs_uploaded") {
       nextStep = "filecoin_access_deploy";
+    } else if (agreement.processStatus === "filecoin_access_deployed") {
+      nextStep = "filecoin_store_file";
+    } else if (agreement.processStatus === "filecoin_stored") {
+      nextStep = "flow_deploy";
     } else if (agreement.processStatus === "filecoin_deployed") {
       // Check if filecoin_store_file is completed
       const storeFileStep = agreement.deploymentSteps.find(

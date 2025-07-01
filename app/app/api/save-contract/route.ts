@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       partyB, // Party B email (optional, can be null if no second signer)
       depositA, // Deposit amount for party A
       depositB, // Deposit amount for party B (optional, defaults to 0)
+      signers, // Array of signer objects to persist
       cid, // Optional CID from frontend IPFS upload
       draftId, // Optional draft ID to update existing agreement
     } = body;
@@ -114,6 +115,8 @@ export async function POST(req: NextRequest) {
             partyB: partyB && partyB.trim() ? partyB.trim() : null,
             depositA: depositA || 0,
             depositB: depositB || 0,
+            // Persist signers if provided
+            ...(signers ? { signersData: JSON.stringify(signers) } : {}),
             // Preserve existing CID if no new one provided
             cid: finalCid || existingAgreement.cid,
             lastStepAt: new Date(),
@@ -140,6 +143,7 @@ export async function POST(req: NextRequest) {
           depositB: depositB || 0, // Deposit amount for party B
           processStatus: "db_saved", // Update process status
           currentStep: "ipfs_upload", // Move to next step
+          ...(signers ? { signersData: JSON.stringify(signers) } : {}),
         },
       });
       console.log(`Created new agreement with ID: ${agreement.id}`);
@@ -175,8 +179,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4. Save the actual file content locally, named by agreement ID
-    const localFilePath = path.join(contractsDir, `${agreement.id}.md`);
+    // 4. Save the actual file content locally, named by agreement ID with timestamp
+    const timestamp = new Date().toISOString();
+    const localFilePath = path.join(
+      contractsDir,
+      `${agreement.id}-${timestamp}.md`
+    );
     await fs.writeFile(localFilePath, content, "utf8");
     console.log(`Contract content saved locally to: ${localFilePath}`);
 

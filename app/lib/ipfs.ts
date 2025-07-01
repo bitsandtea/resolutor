@@ -31,12 +31,21 @@ export async function pinToIPFS(
   }
 
   // Create a temporary file
-  const tempDir = tmpdir();
-  const tempFilePath = path.join(tempDir, filename);
+  const timestamp = new Date().toISOString();
+  const tempDir = path.join(process.cwd(), "public", "contracts", "temp_saved");
+  const tempFilePath = path.join(tempDir, `${agreementId}-${timestamp}.md`);
 
   try {
+    // Ensure the directory exists
+    await fs.mkdir(tempDir, { recursive: true });
+
+    // Append agreement ID and timestamp to content
+    const modifiedContent = `${content}\n\n---\nAgreement ID: ${agreementId}\nUploaded: ${timestamp}`;
+
     // Write content to temporary file
-    await fs.writeFile(tempFilePath, content, "utf8");
+    console.log("path", tempFilePath);
+    console.log("Writing content to temporary file", modifiedContent);
+    await fs.writeFile(tempFilePath, modifiedContent, "utf8");
 
     // Mark deployment step as in progress
     await prisma.deploymentStep.upsert({

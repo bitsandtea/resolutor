@@ -53,7 +53,6 @@ type Step =
   | "loadingContract"
   | "displayContract"
   | "approveToken"
-  | "takeDeposits"
   | "registerPartyB"
   | "legalAcknowledgment"
   | "signContract"
@@ -61,15 +60,7 @@ type Step =
   | "readOnly"
   | "error";
 
-const STATUS_NAMES = [
-  "Created",
-  "Signed",
-  "PartialDeposit",
-  "FullDeposit",
-  "Active",
-  "Disputed",
-  "Resolved",
-];
+const STATUS_NAMES = ["Created", "Signed", "Active", "Disputed", "Resolved"];
 
 const SignContractPage: React.FC = () => {
   const params = useParams();
@@ -104,12 +95,6 @@ const SignContractPage: React.FC = () => {
   } = useWriteContract();
 
   const {
-    writeContract: writeTakeDeposits,
-    data: depositsHash,
-    isPending: isDepositsPending,
-  } = useWriteContract();
-
-  const {
     writeContract: writeSignContract,
     data: signHash,
     isPending: isSignPending,
@@ -118,8 +103,6 @@ const SignContractPage: React.FC = () => {
   // Transaction receipt hooks
   const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } =
     useWaitForTransactionReceipt({ hash: approveHash });
-  const { isLoading: isDepositsConfirming, isSuccess: isDepositsSuccess } =
-    useWaitForTransactionReceipt({ hash: depositsHash });
   const { isLoading: isSignConfirming, isSuccess: isSignSuccess } =
     useWaitForTransactionReceipt({ hash: signHash });
 
@@ -375,7 +358,7 @@ const SignContractPage: React.FC = () => {
 
       setRequiredDeposit(contractState.depositB);
 
-      // New flow: approve → sign → takeDeposits
+      // New simplified flow: approve → sign (deposits taken automatically)
       // Check database state first, then fallback to blockchain state
       const approveStep = signingState?.deploymentSteps?.find(
         (s: { stepName: string; status: string }) =>
@@ -385,19 +368,10 @@ const SignContractPage: React.FC = () => {
         (s: { stepName: string; status: string }) =>
           s.stepName === "sign_contract"
       );
-      const depositStep = signingState?.deploymentSteps?.find(
-        (s: { stepName: string; status: string }) =>
-          s.stepName === "sign_take_deposits"
-      );
 
-      if (depositStep?.status === "completed") {
+      if (signStep?.status === "completed" || contractState.status >= 2) {
+        // Contract is signed and active (deposits taken automatically)
         setCurrentStep("completed");
-      } else if (
-        signStep?.status === "completed" ||
-        contractState.status >= 1
-      ) {
-        // Contract is signed, time for deposits
-        setCurrentStep("takeDeposits");
       } else if (
         approveStep?.status === "completed" &&
         allowance &&
@@ -433,17 +407,9 @@ const SignContractPage: React.FC = () => {
     if (isSignSuccess && signHash) {
       updateSigningStep("sign_contract", "completed", signHash);
       refetchState();
-      setCurrentStep("takeDeposits");
-    }
-  }, [isSignSuccess, signHash, refetchState]);
-
-  useEffect(() => {
-    if (isDepositsSuccess && depositsHash) {
-      updateSigningStep("sign_take_deposits", "completed", depositsHash);
-      refetchState();
       setCurrentStep("completed");
     }
-  }, [isDepositsSuccess, depositsHash, refetchState]);
+  }, [isSignSuccess, signHash, refetchState]);
 
   const handleApproveToken = async () => {
     if (!agreement?.flowContractAddr || !requiredDeposit) return;
@@ -467,18 +433,6 @@ const SignContractPage: React.FC = () => {
       address: agreement.flowContractAddr as `0x${string}`,
       abi: MultiSigAgreementABI,
       functionName: "signContract",
-    });
-  };
-
-  const handleTakeDeposits = async () => {
-    if (!agreement?.flowContractAddr) return;
-
-    await updateSigningStep("sign_take_deposits", "in_progress");
-
-    writeTakeDeposits({
-      address: agreement.flowContractAddr as `0x${string}`,
-      abi: MultiSigAgreementABI,
-      functionName: "takeDeposits",
     });
   };
 
@@ -775,25 +729,6 @@ const SignContractPage: React.FC = () => {
               </div>
             )}
 
-            {currentStep === "takeDeposits" && (
-              <div className="text-center">
-                <h3 className="text-lg font-semibold mb-4">Execute Deposit</h3>
-                <p className="text-gray-600 mb-6">
-                  Now execute the deposit transaction to lock your{" "}
-                  {formatEther(requiredDeposit)} tokens.
-                </p>
-                <button
-                  onClick={handleTakeDeposits}
-                  disabled={isDepositsPending || isDepositsConfirming}
-                  className="bg-purple-500 text-white py-3 px-6 rounded-lg hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isDepositsPending || isDepositsConfirming
-                    ? "Processing Deposit..."
-                    : "Execute Deposit"}
-                </button>
-              </div>
-            )}
-
             {currentStep === "registerPartyB" && (
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-semibold mb-4 text-center">
@@ -912,11 +847,12 @@ const SignContractPage: React.FC = () => {
             {currentStep === "signContract" && (
               <div className="text-center">
                 <h3 className="text-lg font-semibold mb-4">
-                  Sign the Contract
+                  Sign Contract & Execute Deposit
                 </h3>
                 <p className="text-gray-600 mb-6">
                   Execute the final signature to complete your participation in
-                  this agreement.
+                  this agreement. Your deposit of {formatEther(requiredDeposit)}{" "}
+                  tokens will be automatically transferred when you sign.
                 </p>
                 <button
                   onClick={handleSignContract}
@@ -924,8 +860,8 @@ const SignContractPage: React.FC = () => {
                   className="bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSignPending || isSignConfirming
-                    ? "Signing Contract..."
-                    : "Sign Contract"}
+                    ? "Signing & Depositing..."
+                    : "Sign Contract & Deposit"}
                 </button>
               </div>
             )}
@@ -951,8 +887,9 @@ const SignContractPage: React.FC = () => {
                   </svg>
                 </div>
                 <p className="text-gray-600 mb-6">
-                  Your signing and deposit process is complete. The agreement is
-                  now active and your deposit has been locked.
+                  Your signing process is complete! The agreement is now active
+                  and your deposit has been automatically transferred and
+                  locked.
                 </p>
                 <button
                   onClick={() => router.push(`/sign/${agreementId}/success`)}
@@ -966,7 +903,7 @@ const SignContractPage: React.FC = () => {
         )}
 
         {/* Transaction Hashes */}
-        {(approveHash || depositsHash || signHash) && (
+        {(approveHash || signHash) && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold mb-4">Transaction History</h3>
             <div className="space-y-2 text-sm">
@@ -982,21 +919,11 @@ const SignContractPage: React.FC = () => {
                   </div>
                 </div>
               )}
-              {depositsHash && (
-                <div className="flex items-center">
-                  <span className="font-normal">Deposit Execution:</span>
-                  <div className="ml-2">
-                    <AddressDisplay
-                      address={depositsHash}
-                      maxLength={20}
-                      clipboard={true}
-                    />
-                  </div>
-                </div>
-              )}
               {signHash && (
                 <div className="flex items-center">
-                  <span className="font-normal">Contract Signature:</span>
+                  <span className="font-normal">
+                    Contract Signature & Deposit:
+                  </span>
                   <div className="ml-2">
                     <AddressDisplay
                       address={signHash}

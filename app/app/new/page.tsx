@@ -1,5 +1,6 @@
 "use client";
 
+import { TransactionProvider } from "@/lib/context/TransactionContext";
 import {
   BlockchainDeploymentState,
   ContractDefinition,
@@ -64,6 +65,8 @@ const NewContractPage: React.FC = () => {
     agreementId: string;
     cid?: string;
   } | null>(null);
+  const [preDeploymentIsLoading, setPreDeploymentIsLoading] =
+    useState<boolean>(false);
   const [deploymentState, setDeploymentState] =
     useState<BlockchainDeploymentState | null>(null);
 
@@ -71,6 +74,7 @@ const NewContractPage: React.FC = () => {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [isDraftLoading, setIsDraftLoading] = useState<boolean>(false);
   const [isDraftSaving, setIsDraftSaving] = useState<boolean>(false);
+  const [draftWasLoaded, setDraftWasLoaded] = useState<boolean>(false);
 
   // Step transition loading state
   const [isStepTransitioning, setIsStepTransitioning] =
@@ -86,7 +90,16 @@ const NewContractPage: React.FC = () => {
       loadDraft(urlDraftId);
     }
     // If no draftId in URL, start fresh - don't load any draft
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update URL when draftId changes
+  useEffect(() => {
+    if (draftId) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("draftId", draftId);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [draftId]);
 
   // Auto-save effect - save draft when important data changes
   useInterval(() => {
@@ -191,8 +204,8 @@ const NewContractPage: React.FC = () => {
         } else {
           throw new Error("Template file path not specified in definition.");
         }
-        // Only set to fillForm if we're not loading a draft
-        if (!isDraftLoading && uiStep === "selectContract") {
+        // Only set to fillForm if we're not loading a draft AND no draft was loaded
+        if (!isDraftLoading && !draftWasLoaded && uiStep === "selectContract") {
           setUiStep("fillForm");
         }
 
@@ -218,7 +231,7 @@ const NewContractPage: React.FC = () => {
     };
 
     loadDefinitionAndTemplate();
-  }, [selectedDefinitionFilename]);
+  }, [selectedDefinitionFilename, isDraftLoading, draftWasLoaded]);
 
   // Function to provide placeholder data for form fields
   const getPlaceholderValue = (placeholderId: string): string => {
@@ -385,6 +398,7 @@ const NewContractPage: React.FC = () => {
   };
 
   const handleSaveContract = async () => {
+    setPreDeploymentIsLoading(true);
     if (!currentDefinition) {
       setErrorMessage("No contract definition loaded.");
       setUiStep("manageSigners");
@@ -423,7 +437,8 @@ const NewContractPage: React.FC = () => {
           partyB: otherSigner?.email || null,
           depositA: creatorSigner.depositAmount || 0,
           depositB: otherSigner?.depositAmount || 0,
-          draftId: draftId, // Pass draftId to update existing agreement
+          signers,
+          draftId: draftId,
         }),
       });
 
@@ -452,6 +467,8 @@ const NewContractPage: React.FC = () => {
       );
       setUiStep("manageSigners");
       setIsLoading(false);
+    } finally {
+      setPreDeploymentIsLoading(false);
     }
   };
 
@@ -652,6 +669,7 @@ Powered by Resolutor`;
         return;
       }
 
+      console.log("Loading draft with ID:", idToUse);
       const response = await fetch(`/api/save-draft?draftId=${idToUse}`);
       if (!response.ok) {
         if (response.status === 404) {
@@ -665,11 +683,12 @@ Powered by Resolutor`;
       }
 
       const result = await response.json();
+      console.log("Draft loaded successfully:", result);
+
       if (result.success && result.draft) {
         const draft = result.draft;
 
         setDraftId(draft.id);
-        setUiStep(draft.currentStep || "selectContract");
         setSelectedDefinitionFilename(draft.selectedDefinitionFilename);
         setContractName(draft.contractName || "MyContract");
         setFormData(draft.formData || {});
@@ -683,12 +702,79 @@ Powered by Resolutor`;
           });
         }
 
-        // If we're supposed to be at deployment progress, make sure we navigate there
-        if (draft.currentStep === "deploymentProgress") {
-          setUiStep("deploymentProgress");
-        }
-
         localStorage.setItem("draftId", draft.id);
+
+        // Set UI step last, after all other state is set
+        // This ensures the template loading effect won't override our UI step
+        setDraftWasLoaded(true);
+        setTimeout(() => {
+          // Determine UI step based on actual progress, not just saved currentStep
+          let targetStep: UIStep;
+
+          // Check processStatus first for deployment-related progress
+          if (draft.processStatus) {
+            const deploymentStatusMap: Record<string, UIStep> = {
+              ipfs_uploaded: "deploymentProgress",
+              filecoin_access_deployed: "deploymentProgress",
+              filecoin_stored: "deploymentProgress",
+              flow_deployed: "deploymentProgress",
+              completed: "success",
+            };
+
+            if (deploymentStatusMap[draft.processStatus]) {
+              targetStep = deploymentStatusMap[draft.processStatus];
+            } else if (draft.signers && draft.signers.length > 0) {
+              // Has signers data, should be at deployment or signers step
+              targetStep = "deploymentProgress";
+            } else if (
+              draft.formData &&
+              Object.keys(draft.formData).length > 0
+            ) {
+              // Has form data, should be at signers step
+              targetStep = "manageSigners";
+            } else if (draft.selectedDefinitionFilename) {
+              // Has selected template, should be at form step
+              targetStep = "fillForm";
+            } else {
+              targetStep = "selectContract";
+            }
+          } else {
+            // Fallback to original logic for drafts without processStatus
+            const deploymentSteps = [
+              "ipfs_upload",
+              "filecoin_access_deploy",
+              "filecoin_store_file",
+              "flow_deploy",
+            ];
+
+            if (deploymentSteps.includes(draft.currentStep)) {
+              targetStep = "deploymentProgress";
+            } else if (draft.currentStep === "completed") {
+              targetStep = "success";
+            } else if (draft.signers && draft.signers.length > 0) {
+              targetStep = "manageSigners";
+            } else if (
+              draft.formData &&
+              Object.keys(draft.formData).length > 0
+            ) {
+              targetStep = "manageSigners";
+            } else if (draft.selectedDefinitionFilename) {
+              targetStep = "fillForm";
+            } else {
+              targetStep = "selectContract";
+            }
+          }
+
+          console.log(
+            "Mapping processStatus:",
+            draft.processStatus,
+            "currentStep:",
+            draft.currentStep,
+            "to UI step:",
+            targetStep
+          );
+          setUiStep(targetStep);
+        }, 100);
       }
     } catch (error) {
       console.error("Error loading draft:", error);
@@ -700,6 +786,16 @@ Powered by Resolutor`;
 
   const inputBaseClasses =
     "w-full py-2.5 px-3 border border-gray-300 rounded text-base text-gray-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none";
+
+  // Show loading state while draft is being loaded
+  if (isDraftLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-grow">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-gray-600 text-lg">Loading saved draft...</p>
+      </div>
+    );
+  }
 
   if (
     isLoading &&
@@ -761,7 +857,7 @@ Powered by Resolutor`;
   }
 
   if (uiStep === "deploymentProgress") {
-    if (!contractResult) {
+    if (!contractResult && !preDeploymentIsLoading) {
       return (
         <div className="flex flex-col items-center justify-center flex-grow">
           <p className="text-red-500 text-lg">
@@ -779,7 +875,7 @@ Powered by Resolutor`;
 
     return (
       <DeploymentProgressStep
-        agreementId={contractResult.agreementId}
+        agreementId={contractResult?.agreementId || ""}
         onComplete={handleDeploymentComplete}
         onError={handleDeploymentError}
         onBack={handleDeploymentBack}
@@ -1109,7 +1205,7 @@ Powered by Resolutor`;
   }
 
   return (
-    <>
+    <TransactionProvider>
       <div className="flex flex-col items-center w-full">
         <h1 className="text-4xl font-bold text-gray-800 mb-4">
           New Contract Wizard
@@ -1181,7 +1277,7 @@ Powered by Resolutor`;
           )}
         </div>
       </div>
-    </>
+    </TransactionProvider>
   );
 };
 
