@@ -120,7 +120,7 @@ export type ProcessStatus =
   | "ipfs_uploaded"
   | "filecoin_access_deployed"
   | "filecoin_stored"
-  | "filecoin_deployed"
+  | "filecoin_access_deployed"
   | "flow_deployed"
   | "completed"
   | "failed";
@@ -129,7 +129,6 @@ export type DeploymentStepName =
   | "db_save"
   | "ipfs_upload"
   | "filecoin_access_deploy"
-  | "filecoin_store_file"
   | "flow_deploy";
 
 export type DeploymentStepStatus =
@@ -231,16 +230,6 @@ export type UIStep =
   | "deploymentComplete"
   | "deploymentFailed"
   | "success";
-
-export interface NetworkConfig {
-  networkName: string;
-  chainId: string;
-  rpcUrl: string;
-  explorerUrl?: string;
-  factoryAddr?: string;
-  tokenAddr?: string;
-  isActive: boolean;
-}
 
 // Error types for better error handling
 export interface DeploymentError {

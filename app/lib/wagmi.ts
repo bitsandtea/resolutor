@@ -15,9 +15,6 @@ export const CONTRACT_ADDRESSES = {
     .NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS as `0x${string}`,
   MOCK_ERC20: process.env.NEXT_PUBLIC_MOCK_ERC20_ADDRESS as `0x${string}`,
   ESCROW_CONTRACT: process.env.NEXT_PUBLIC_MULTISIG_ADDRESS as `0x${string}`,
-  // Add these when you have them deployed
-  AGREEMENT_FACTORY: process.env
-    .NEXT_PUBLIC_AGREEMENT_FACTORY_ADDRESS as `0x${string}`,
 };
 
 // Other useful constants

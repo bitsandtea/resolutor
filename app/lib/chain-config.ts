@@ -112,8 +112,6 @@ export const CONTRACT_ADDRESSES = {
     MOCK_ERC20: process.env.NEXT_PUBLIC_MOCK_ERC20_ADDRESS as `0x${string}`,
   },
   [CHAIN_IDS.FLOW_EVM_TESTNET]: {
-    AGREEMENT_FACTORY: process.env
-      .NEXT_PUBLIC_AGREEMENT_FACTORY_ADDRESS as `0x${string}`,
     MOCK_ERC20: process.env.NEXT_PUBLIC_MOCK_ERC20_ADDRESS as `0x${string}`,
   },
 } as const;

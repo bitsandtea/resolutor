@@ -8,15 +8,16 @@ export const useCreateAccessControl = () => {
   const createAccessControl = (
     agreementId: string,
     partyA: string,
-    mediator: string
+    mediator: string,
+    fileCid: string
   ) => {
     writeContract({
       chainId:
         Number(process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID) || 3141,
       address: CONTRACT_ADDRESSES.ACCESS_CONTROL,
       abi: AccessControlABI,
-      functionName: "createAgreement",
-      args: [agreementId, partyA, mediator],
+      functionName: "createAgreementWithFile",
+      args: [agreementId, partyA, mediator, fileCid],
     });
   };
 

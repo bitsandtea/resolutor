@@ -16,6 +16,8 @@ model Agreement {
   templateType  String? // "rental", "freelancer", etc.
   partyA        String? // Party A's email/wallet - nullable for drafts
   partyB        String? // Party B's email/wallet address  
+  partyA_address String?
+  partyB_address String?
   depositA      Float @default(0) // Party A deposit amount
   depositB      Float @default(0) // Party B deposit amount
   depositAPaid  Boolean @default(false) // Whether Party A has paid their deposit
@@ -37,8 +39,8 @@ model Agreement {
   filecoinAccessTx  String? // Transaction hash of Filecoin AccessControl deployment
   
   // Process tracking
-  processStatus  String @default("draft") // draft, db_saved, ipfs_uploaded, filecoin_deployed, flow_deployed, completed, failed
-  currentStep    String @default("selectContract") // selectContract, fillForm, manageSigners, deploymentProgress, ipfs_upload, filecoin_deploy, flow_deploy, completed
+  processStatus  String @default("draft") // draft, db_saved, ipfs_uploaded, filecoin_access_deployed, flow_deployed, completed, failed
+  currentStep    String @default("selectContract") // selectContract, fillForm, manageSigners, deploymentProgress, ipfs_upload, filecoin_access_deploy, flow_deploy, completed
   lastStepAt     DateTime @default(now())
   errorDetails   String? // Error details if process failed
   retryCount     Int @default(0) // Number of retry attempts
@@ -119,20 +121,3 @@ model IPFSUpload {
   createdAt   DateTime @default(now())
 }
 
-// Track blockchain network configurations
-model NetworkConfig {
-  id              String @id @default(cuid())
-  networkName     String @unique // "flow-testnet", "filecoin-calibration", etc.
-  chainId         String
-  rpcUrl          String
-  explorerUrl     String?
-  
-  // Contract addresses for this network
-  factoryAddr     String? // Flow AgreementFactory address
-  storageManager  String? // Filecoin StorageManager address  
-  tokenAddr       String? // Mock ERC20 token address
-  
-  isActive        Boolean @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}

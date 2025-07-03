@@ -9,16 +9,15 @@ import { AccessControlABI, AgreementFactoryABI } from "../ABIs";
 import { CONTRACT_ADDRESSES, MEDIATOR_ADDRESS, config } from "../wagmi";
 
 interface CreateAgreementParams {
+  agreementId: `0x${string}`;
   partyA: `0x${string}`;
-
-  partyB?: `0x${string}`; // Optional - if provided, will use createAndSignAgreement
-  mediator: `0x${string}`; // Optional, will use default if not provided
+  mediator: `0x${string}`;
   depositA: bigint;
   depositB: bigint;
-  token: `0x${string}`; // Optional, will use MOCK_ERC20 if not provided
+  token: `0x${string}`;
   filecoinAccessControl: `0x${string}`;
-  fileCid?: string; // Optional IPFS hash to store after agreement creation
-  agreementId?: string; // Optional agreement ID for file storage
+  signOnCreate: boolean;
+  fileCid?: string;
 }
 
 interface StoreFileParams {
@@ -40,12 +39,10 @@ export const useCreateAgreement = () => {
     hash: txHash,
   });
 
-  // Extract contract address from receipt
-  const getCreatedContractAddress = (): `0x${string}` | null => {
+  const getCreatedAgreementId = (): string | null => {
     if (!receipt || !receipt.logs) return null;
 
     try {
-      // Find the AgreementCreated event in the logs
       for (const log of receipt.logs) {
         try {
           const decodedLog = decodeEventLog({
@@ -54,13 +51,10 @@ export const useCreateAgreement = () => {
             topics: log.topics,
           });
 
-          // Check if this is the AgreementCreated event
           if (decodedLog.eventName === "AgreementCreated" && decodedLog.args) {
-            // The first argument is the contract address
-            return (decodedLog.args as any).contractAddr as `0x${string}`;
+            return (decodedLog.args as any).agreementId.toString();
           }
         } catch (e) {
-          // Skip logs that can't be decoded with our ABI
           continue;
         }
       }
@@ -135,35 +129,26 @@ export const useCreateAgreement = () => {
     }
 
     try {
-      // Always use createAndSignAgreement for optimized one-transaction flow
-      // Pass address(0) for partyB if unknown - they can join later via signContract
-      const partyBAddress =
-        params.partyB &&
-        params.partyB !== "0x0000000000000000000000000000000000000000"
-          ? params.partyB
-          : ("0x0000000000000000000000000000000000000000" as `0x${string}`);
-
       const sendParams = {
-        address: CONTRACT_ADDRESSES.AGREEMENT_FACTORY,
+        address:
+          (process.env.NEXT_PUBLIC_MULTISIG_ADDRESS as `0x${string}`) ||
+          CONTRACT_ADDRESSES.ESCROW_CONTRACT,
         abi: AgreementFactoryABI,
-        functionName: "createAndSignAgreement",
+        functionName: "createAgreement",
         args: [
+          params.agreementId,
           params.partyA,
-          partyBAddress,
           params.mediator || MEDIATOR_ADDRESS,
           params.depositA,
           params.depositB,
           params.token || CONTRACT_ADDRESSES.MOCK_ERC20,
-          CONTRACT_ADDRESSES.ACCESS_CONTROL,
+          params.filecoinAccessControl,
+          params.signOnCreate,
         ],
       };
 
       console.log(
-        `Using createAndSignAgreement - Create and Sign in one transaction!${
-          partyBAddress === "0x0000000000000000000000000000000000000000"
-            ? " (PartyB will join later)"
-            : " (Both parties known)"
-        }`,
+        `Using createAgreement - Create and Sign in one transaction!`,
         sendParams
       );
 
@@ -195,6 +180,6 @@ export const useCreateAgreement = () => {
     receipt,
     isConfirming,
     isSuccess,
-    contractAddress: getCreatedContractAddress(),
+    agreementId: getCreatedAgreementId(),
   };
 };

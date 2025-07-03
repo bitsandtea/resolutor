@@ -31,9 +31,9 @@ export const AgreementFactoryABI = [
     inputs: [
       {
         indexed: true,
-        internalType: "address",
-        name: "contractAddr",
-        type: "address",
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
       },
       {
         indexed: true,
@@ -46,19 +46,419 @@ export const AgreementFactoryABI = [
     type: "event",
   },
   {
+    anonymous: false,
     inputs: [
       {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "partyB",
+        type: "address",
+      },
+    ],
+    name: "ContractSigned",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "party",
+        type: "address",
+      },
+    ],
+    name: "PartyApproved",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
         internalType: "uint256",
-        name: "",
+        name: "amountA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "amountB",
         type: "uint256",
       },
     ],
-    name: "agreements",
+    name: "DepositsTaken",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "Activated",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "opener",
+        type: "address",
+      },
+    ],
+    name: "DisputeOpened",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "proposer",
+        type: "address",
+      },
+    ],
+    name: "ResolutionProposed",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "approver",
+        type: "address",
+      },
+    ],
+    name: "ResolutionApproved",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+      {
+        internalType: "uint256",
+        name: "amountToA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "amountToB",
+        type: "uint256",
+      },
+    ],
+    name: "ResolutionExecuted",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "bytes32",
+        name: "agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "Refunded",
+    type: "event",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+      {
+        internalType: "address",
+        name: "_partyA",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_mediator",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "_depositA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "_depositB",
+        type: "uint256",
+      },
+      {
+        internalType: "address",
+        name: "_token",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_filecoinAccessControl",
+        type: "address",
+      },
+      {
+        internalType: "bool",
+        name: "signOnCreate",
+        type: "bool",
+      },
+    ],
+    name: "createAgreement",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "signContract",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "approveDeposit",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "openDispute",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+      {
+        internalType: "uint256",
+        name: "_amountToA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "_amountToB",
+        type: "uint256",
+      },
+    ],
+    name: "proposeResolution",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "approveResolution",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "refundExpired",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "getAgreement",
     outputs: [
       {
         internalType: "address",
-        name: "",
+        name: "partyA",
         type: "address",
+      },
+      {
+        internalType: "address",
+        name: "partyB",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "mediator",
+        type: "address",
+      },
+      {
+        internalType: "uint256",
+        name: "depositA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "depositB",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "balance",
+        type: "uint256",
+      },
+      {
+        internalType: "enum AgreementFactory.Status",
+        name: "status",
+        type: "uint8",
+      },
+      {
+        internalType: "address",
+        name: "token",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "filecoinAccessControl",
+        type: "address",
+      },
+      {
+        internalType: "bool",
+        name: "partyAApproved",
+        type: "bool",
+      },
+      {
+        internalType: "bool",
+        name: "partyBApproved",
+        type: "bool",
+      },
+      {
+        internalType: "uint256",
+        name: "creationTimestamp",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
+    ],
+    name: "getProposal",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "amountToA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "amountToB",
+        type: "uint256",
+      },
+      {
+        internalType: "uint8",
+        name: "approvalCount",
+        type: "uint8",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "agreements",
+    outputs: [
+      {
+        internalType: "address[]",
+        name: "",
+        type: "address[]",
       },
     ],
     stateMutability: "view",
@@ -75,99 +475,6 @@ export const AgreementFactoryABI = [
       },
     ],
     stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "_partyA",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_mediator",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "_depositA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "_depositB",
-        type: "uint256",
-      },
-      {
-        internalType: "address",
-        name: "_token",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_filecoinAccessControl",
-        type: "address",
-      },
-    ],
-    name: "createAgreement",
-    outputs: [
-      {
-        internalType: "address",
-        name: "newAgreement",
-        type: "address",
-      },
-    ],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "_partyA",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_partyB",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_mediator",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "_depositA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "_depositB",
-        type: "uint256",
-      },
-      {
-        internalType: "address",
-        name: "_token",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_filecoinAccessControl",
-        type: "address",
-      },
-    ],
-    name: "createAndSignAgreement",
-    outputs: [
-      {
-        internalType: "address",
-        name: "newAgreement",
-        type: "address",
-      },
-    ],
-    stateMutability: "nonpayable",
     type: "function",
   },
   {
@@ -641,489 +948,6 @@ export const MockERC20ABI = [
   },
 ];
 
-export const MultiSigAgreementABI = [
-  {
-    inputs: [],
-    stateMutability: "nonpayable",
-    type: "constructor",
-  },
-  {
-    inputs: [],
-    name: "InvalidInitialization",
-    type: "error",
-  },
-  {
-    inputs: [],
-    name: "NotInitializing",
-    type: "error",
-  },
-  {
-    inputs: [],
-    name: "ReentrancyGuardReentrantCall",
-    type: "error",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "token",
-        type: "address",
-      },
-    ],
-    name: "SafeERC20FailedOperation",
-    type: "error",
-  },
-  {
-    anonymous: false,
-    inputs: [],
-    name: "Activated",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "contractAddr",
-        type: "address",
-      },
-      {
-        indexed: true,
-        internalType: "address",
-        name: "partyA",
-        type: "address",
-      },
-    ],
-    name: "AgreementCreated",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "partyB",
-        type: "address",
-      },
-    ],
-    name: "ContractSigned",
-    type: "event",
-  },
-
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: false,
-        internalType: "uint256",
-        name: "amountA",
-        type: "uint256",
-      },
-      {
-        indexed: false,
-        internalType: "uint256",
-        name: "amountB",
-        type: "uint256",
-      },
-    ],
-    name: "DepositsTaken",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "opener",
-        type: "address",
-      },
-    ],
-    name: "DisputeOpened",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: false,
-        internalType: "uint64",
-        name: "version",
-        type: "uint64",
-      },
-    ],
-    name: "Initialized",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "party",
-        type: "address",
-      },
-    ],
-    name: "PartyApproved",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [],
-    name: "Refunded",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "approver",
-        type: "address",
-      },
-    ],
-    name: "ResolutionApproved",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: false,
-        internalType: "uint256",
-        name: "amountToA",
-        type: "uint256",
-      },
-      {
-        indexed: false,
-        internalType: "uint256",
-        name: "amountToB",
-        type: "uint256",
-      },
-    ],
-    name: "ResolutionExecuted",
-    type: "event",
-  },
-  {
-    anonymous: false,
-    inputs: [
-      {
-        indexed: true,
-        internalType: "address",
-        name: "proposer",
-        type: "address",
-      },
-    ],
-    name: "ResolutionProposed",
-    type: "event",
-  },
-  {
-    inputs: [],
-    name: "DEPOSIT_TIMEOUT",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "MAX_DEPOSIT",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "agreement",
-    outputs: [
-      {
-        internalType: "address",
-        name: "partyA",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "partyB",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "mediator",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "depositA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "depositB",
-        type: "uint256",
-      },
-      {
-        internalType: "enum MultiSigAgreement.Status",
-        name: "status",
-        type: "uint8",
-      },
-      {
-        internalType: "address",
-        name: "filecoinAccessControl",
-        type: "address",
-      },
-      {
-        internalType: "bool",
-        name: "partyAApproved",
-        type: "bool",
-      },
-      {
-        internalType: "bool",
-        name: "partyBApproved",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "approveDeposit",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "approveResolution",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "creationTimestamp",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "",
-        type: "uint256",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "currentProp",
-    outputs: [
-      {
-        internalType: "uint256",
-        name: "amountToA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "amountToB",
-        type: "uint256",
-      },
-      {
-        internalType: "uint8",
-        name: "approvalCount",
-        type: "uint8",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "getState",
-    outputs: [
-      {
-        internalType: "address",
-        name: "partyA",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "partyB",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "mediator",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "depositA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "depositB",
-        type: "uint256",
-      },
-      {
-        internalType: "enum MultiSigAgreement.Status",
-        name: "status",
-        type: "uint8",
-      },
-      {
-        internalType: "address",
-        name: "filecoinAccessControl",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "propAmountToA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "propAmountToB",
-        type: "uint256",
-      },
-      {
-        internalType: "uint8",
-        name: "approvalCount",
-        type: "uint8",
-      },
-      {
-        internalType: "bool",
-        name: "partyAApproved",
-        type: "bool",
-      },
-      {
-        internalType: "bool",
-        name: "partyBApproved",
-        type: "bool",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "_partyA",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_mediator",
-        type: "address",
-      },
-      {
-        internalType: "uint256",
-        name: "_depositA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "_depositB",
-        type: "uint256",
-      },
-      {
-        internalType: "address",
-        name: "_token",
-        type: "address",
-      },
-      {
-        internalType: "address",
-        name: "_filecoinAccessControl",
-        type: "address",
-      },
-    ],
-    name: "initialize",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "openDispute",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "uint256",
-        name: "amountToA",
-        type: "uint256",
-      },
-      {
-        internalType: "uint256",
-        name: "amountToB",
-        type: "uint256",
-      },
-    ],
-    name: "proposeResolution",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "refundExpired",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "signContract",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "_partyB",
-        type: "address",
-      },
-    ],
-    name: "signContractWithPartyB",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-
-  {
-    inputs: [],
-    name: "token",
-    outputs: [
-      {
-        internalType: "contract IERC20",
-        name: "",
-        type: "address",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-];
-
 export const AccessControlABI = [
   {
     anonymous: false,
@@ -1296,6 +1120,34 @@ export const AccessControlABI = [
       },
     ],
     name: "createAgreement",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "string",
+        name: "agreementId",
+        type: "string",
+      },
+      {
+        internalType: "address",
+        name: "partyA",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "mediator",
+        type: "address",
+      },
+      {
+        internalType: "string",
+        name: "fileCid",
+        type: "string",
+      },
+    ],
+    name: "createAgreementWithFile",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
