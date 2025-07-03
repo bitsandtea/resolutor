@@ -63,14 +63,10 @@ export async function POST(request: NextRequest) {
         newCurrentStep = "filecoin_access_deploy";
       } else if (stepName === "filecoin_access_deploy") {
         newProcessStatus = "filecoin_access_deployed";
-        newCurrentStep = "filecoin_store_file";
+        newCurrentStep = "flow_deploy";
         if (contractAddr) {
           agreementUpdates.filecoinAccessControl = contractAddr;
-          agreementUpdates.filecoinAccessTx = txHash;
         }
-      } else if (stepName === "filecoin_store_file") {
-        newProcessStatus = "filecoin_stored";
-        newCurrentStep = "flow_deploy";
       } else if (stepName === "flow_deploy") {
         newProcessStatus = "flow_deployed";
         newCurrentStep = "completed";

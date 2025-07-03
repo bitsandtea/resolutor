@@ -4,14 +4,13 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { agreementId, name, email, address } = body;
+    const { agreementId, address } = body;
 
-    if (!agreementId || !name || !email || !address) {
+    if (!agreementId || !address) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Missing required fields: agreementId, name, email, or address",
+          error: "Missing required fields: agreementId or address",
         },
         { status: 400 }
       );
@@ -42,8 +41,8 @@ export async function POST(req: NextRequest) {
     // Add or update Party B information
     const partyBSigner = {
       id: "partyB",
-      name,
-      email,
+      name: "Party B",
+      email: "partyB@example.com",
       address,
       role: "signer",
       status: "pending",
@@ -62,7 +61,8 @@ export async function POST(req: NextRequest) {
     const updatedAgreement = await prisma.agreement.update({
       where: { id: agreementId },
       data: {
-        partyB: address, // Store wallet address as partyB
+        partyB: address, // Use address for partyB field
+        partyB_address: address, // Store wallet address as partyB_address
         signersData: JSON.stringify(signersData),
       },
     });

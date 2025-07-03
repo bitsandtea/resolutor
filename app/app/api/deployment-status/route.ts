@@ -79,19 +79,9 @@ export async function GET(request: NextRequest) {
     } else if (agreement.processStatus === "ipfs_uploaded") {
       nextStep = "filecoin_access_deploy";
     } else if (agreement.processStatus === "filecoin_access_deployed") {
-      nextStep = "filecoin_store_file";
-    } else if (agreement.processStatus === "filecoin_stored") {
       nextStep = "flow_deploy";
-    } else if (agreement.processStatus === "filecoin_deployed") {
-      // Check if filecoin_store_file is completed
-      const storeFileStep = agreement.deploymentSteps.find(
-        (step) => step.stepName === "filecoin_store_file"
-      );
-      if (!storeFileStep || storeFileStep.status !== "completed") {
-        nextStep = "filecoin_store_file";
-      } else {
-        nextStep = "flow_deploy";
-      }
+    } else if (agreement.processStatus === "flow_deployed") {
+      nextStep = "completed";
     } else if (agreement.processStatus === "failed") {
       // Find the last failed step
       const failedStep = agreement.deploymentSteps

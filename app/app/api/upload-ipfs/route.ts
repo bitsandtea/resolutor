@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         data: {
           cid: existingUpload.cid,
           processStatus: "ipfs_uploaded",
-          currentStep: "filecoin_deploy",
+          currentStep: "filecoin_access_deploy",
           lastStepAt: new Date(),
         },
       });
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
         data: {
           cid,
           processStatus: "ipfs_uploaded",
-          currentStep: "filecoin_deploy",
+          currentStep: "filecoin_access_deploy",
           lastStepAt: new Date(),
         },
       });
