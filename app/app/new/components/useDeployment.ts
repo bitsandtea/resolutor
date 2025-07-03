@@ -1,97 +1,32 @@
 import { CONTRACT_ADDRESSES } from "@/lib/chain-config";
 import { useCreateAccessControl } from "@/lib/storage/createAccess";
 import { useCreateAgreement } from "@/lib/storage/createStorage";
-import { config } from "@/lib/wagmi";
+
 import {
   BlockchainDeploymentState,
   DeploymentStepName,
   DeploymentStepStatus,
 } from "@/types";
-import { switchChain } from "@wagmi/core";
 import { useEffect, useState } from "react";
-import { parseEther } from "viem";
+import { parseEther, stringToHex } from "viem";
 import { useAccount, useChainId, useWaitForTransactionReceipt } from "wagmi";
+import {
+  checkAndSwitchChainForStep,
+  fetchDeploymentStatus,
+  getRequiredChainForStep,
+  updateDeploymentStep,
+} from "../helpers";
 import { stepDefinitions, stepOrder } from "./deploymentSteps";
 
 // Chain requirements for each deployment step
-const STEP_CHAIN_REQUIREMENTS: Record<DeploymentStepName, number | null> = {
-  ipfs_upload: null, // No specific chain required
-  filecoin_access_deploy: Number(
-    process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
-  ),
-  filecoin_store_file: Number(
-    process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID || "314159"
-  ),
-  flow_deploy: Number(
-    process.env.NEXT_PUBLIC_FLOW_EVM_TESTNET_CHAIN_ID || "545"
-  ), // Flow Testnet
-  db_save: null, // No specific chain required
-};
-
-// Helper functions for chain management
-const getRequiredChainForStep = (
-  stepName: DeploymentStepName
-): number | null => {
-  return STEP_CHAIN_REQUIREMENTS[stepName];
-};
-
-const getNextStepAfter = (
-  currentStep: DeploymentStepName
-): DeploymentStepName | null => {
-  const currentIndex = stepOrder.indexOf(currentStep);
-  if (currentIndex === -1 || currentIndex === stepOrder.length - 1) {
-    return null;
-  }
-  return stepOrder[currentIndex + 1];
-};
-
-const checkAndSwitchChainForStep = async (
-  stepName: DeploymentStepName,
-  currentChainId: number
-): Promise<boolean> => {
-  const requiredChainId = getRequiredChainForStep(stepName);
-
-  if (!requiredChainId || currentChainId === requiredChainId) {
-    return true; // Already on correct chain or no specific chain required
-  }
-
-  try {
-    console.log(`Switching chain to ${requiredChainId} for step ${stepName}`);
-    await switchChain(config, { chainId: requiredChainId as any });
-    return true;
-  } catch (error) {
-    console.error(`Failed to switch chain for step ${stepName}:`, error);
-    return false;
-  }
-};
 
 const handleStepCompletion = async (
   completedStep: DeploymentStepName,
   currentChainId: number,
   onError: (error: string) => void
 ): Promise<void> => {
-  const nextStep = getNextStepAfter(completedStep);
-
-  if (nextStep) {
-    try {
-      const switchSuccess = await checkAndSwitchChainForStep(
-        nextStep,
-        currentChainId
-      );
-      if (!switchSuccess) {
-        onError(
-          `Failed to switch to required chain for next step: ${nextStep}`
-        );
-      }
-    } catch (error) {
-      console.error("Error during chain switching:", error);
-      onError(
-        `Chain switching error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    }
-  }
+  // Remove automatic chain switching - let manual button trigger handle it
+  console.log(`Step ${completedStep} completed`);
 };
 
 interface UseDeploymentProps {
@@ -113,12 +48,11 @@ export const useDeployment = ({
   const chainId = useChainId();
   const {
     createAgreement,
-    storeFile,
     isPending: isCreatingAgreement,
     error: createError,
     txHash: flowTxHash,
     isSuccess: isFlowSuccess,
-    contractAddress: flowContractAddress,
+    agreementId: flowAgreementId,
   } = useCreateAgreement();
   const {
     createAccessControl,
@@ -136,6 +70,7 @@ export const useDeployment = ({
   const [canRetry, setCanRetry] = useState(false);
   const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
   const [lastPolledTime, setLastPolledTime] = useState<number>(0);
+  const [nextStepButtonActive, setNextStepButtonActive] = useState(false);
 
   const { isLoading: isTxPending } = useWaitForTransactionReceipt({
     hash: (accessTxHash || flowTxHash || pendingTxHash) as `0x${string}`,
@@ -150,91 +85,41 @@ export const useDeployment = ({
     },
   });
 
-  const { isSuccess: isStoreTxSuccess } = useWaitForTransactionReceipt({
-    hash: flowTxHash as `0x${string}`,
-    query: { enabled: !!flowTxHash && currentStep === "filecoin_store_file" },
-  });
-
   const { isSuccess: isFlowDeploySuccess } = useWaitForTransactionReceipt({
     hash: flowTxHash as `0x${string}`,
     query: { enabled: !!flowTxHash && currentStep === "flow_deploy" },
   });
 
-  const updateDeploymentStep = async (
-    stepName: string,
-    status: string,
-    txHash?: string,
-    contractAddr?: string,
-    errorMessage?: string
-  ) => {
-    try {
-      const response = await fetch("/api/update-deployment-step", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agreementId,
-          stepName,
-          status,
-          txHash,
-          contractAddr,
-          errorMessage,
-        }),
-      });
-
-      const result = await response.json();
-      if (!result.success) {
-        console.error("Failed to update deployment step:", result.error);
-      }
-      return result.success;
-    } catch (error) {
-      console.error("Error updating deployment step:", error);
-      return false;
-    }
-  };
-
   const checkDeploymentStatus = async (forceRefresh = false) => {
-    try {
-      // Add throttling to prevent excessive API calls
-      const now = Date.now();
-      if (!forceRefresh && now - lastPolledTime < 2000) {
-        return deploymentState;
-      }
-      setLastPolledTime(now);
-
-      const response = await fetch(
-        `/api/deployment-status?agreementId=${encodeURIComponent(agreementId)}`,
-        {
-          method: "GET",
-        }
-      );
-
-      const data = await response.json();
-      if (data.success) {
-        if (data.currentState) {
-          setDeploymentState(data.currentState);
-
-          // Update current step based on deployment state
-          if (data.isComplete) {
-            setCurrentStep("completed");
-            setIsProcessing(false);
-          }
-        }
-
-        if (data.isComplete && !isProcessing) {
-          onComplete(data.currentState);
-        } else if (data.currentState?.processStatus === "failed") {
-          setIsProcessing(false);
-          setCanRetry(true);
-        }
-
-        return data;
-      } else {
-        throw new Error(data.error || "Failed to check deployment status");
-      }
-    } catch (error) {
-      console.error("Error checking deployment status:", error);
-      return null;
+    // Add throttling to prevent excessive API calls
+    const now = Date.now();
+    if (!forceRefresh && now - lastPolledTime < 2000) {
+      return deploymentState;
     }
+    setLastPolledTime(now);
+
+    const data = await fetchDeploymentStatus(agreementId);
+    if (data) {
+      if (data.currentState) {
+        setDeploymentState(data.currentState);
+
+        // Update current step based on deployment state
+        if (data.isComplete) {
+          setCurrentStep("completed");
+          setIsProcessing(false);
+        }
+      }
+
+      if (data.isComplete && !isProcessing) {
+        onComplete(data.currentState);
+      } else if (data.currentState?.processStatus === "failed") {
+        setIsProcessing(false);
+        setCanRetry(true);
+      }
+
+      return data;
+    }
+    return null;
   };
 
   const executeStep = async (stepName: DeploymentStepName) => {
@@ -242,7 +127,9 @@ export const useDeployment = ({
     setIsProcessing(true);
 
     const stepDef = stepDefinitions[stepName as keyof typeof stepDefinitions];
+    console.debug(`[useDeployment] Executing step: ${stepName}`, { stepDef });
     if (!stepDef) {
+      console.error(`[useDeployment] No step definition found for ${stepName}`);
       return;
     }
 
@@ -251,9 +138,13 @@ export const useDeployment = ({
     try {
       let response;
       if (stepName === "ipfs_upload") {
+        console.debug("[useDeployment] Start: ipfs_upload step");
         const currentStatus = await checkDeploymentStatus(true);
         if (currentStatus?.currentState?.cid) {
           // CID already exists, stop processing to allow manual progression
+          console.debug(
+            "[useDeployment] CID already exists, skipping IPFS upload."
+          );
           setIsProcessing(false);
           return;
         }
@@ -270,41 +161,9 @@ export const useDeployment = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestPayload),
         });
+        console.debug("[useDeployment] End: ipfs_upload step");
       } else if (stepName === "filecoin_access_deploy") {
-        // Chain switching is now handled automatically after step completion
-
-        if (!isConnected || !address) {
-          throw new Error(
-            "Wallet not connected. Please connect your wallet first."
-          );
-        }
-
-        // Mark step as in progress
-        await updateDeploymentStep("filecoin_access_deploy", "in_progress");
-
-        try {
-          await createAccessControl(
-            agreementId,
-            address || "",
-            process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || ""
-          );
-
-          // Don't mark as completed here - let the useEffect handle transaction confirmation
-          // The transaction success will be handled by the useEffect that watches isAccessTxSuccess
-          setIsProcessing(false); // Allow manual progression while waiting for confirmation
-
-          return { success: true, txHash: "pending" };
-        } catch (walletError) {
-          await updateDeploymentStep(
-            "filecoin_access_deploy",
-            "failed",
-            undefined,
-            undefined,
-            `Wallet transaction failed: ${walletError}`
-          );
-          throw new Error(`Wallet transaction failed: ${walletError}`);
-        }
-      } else if (stepName === "filecoin_store_file") {
+        console.debug("[useDeployment] Start: filecoin_access_deploy step");
         // Chain switching is now handled automatically after step completion
 
         if (!isConnected || !address) {
@@ -322,62 +181,45 @@ export const useDeployment = ({
         }
 
         // Mark step as in progress
-        await updateDeploymentStep("filecoin_store_file", "in_progress");
+        await updateDeploymentStep(
+          agreementId,
+          "filecoin_access_deploy",
+          "in_progress"
+        );
 
         try {
-          console.log("Storing file in useDeployment", {
-            fileCid: currentStatus.currentState.cid,
+          console.log("Creating agreement with file in useDeployment", {
             agreementId: agreementId,
+            partyA: address,
+            mediator: process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || "",
+            fileCid: currentStatus.currentState.cid,
           });
 
-          await storeFile({
-            fileCid: currentStatus.currentState.cid,
-            agreementId: agreementId,
-          });
-
-          // The transaction hash will be available via flowTxHash from the shared writeContract hook
-          // The useEffect below will handle updating the step with the transaction hash
+          await createAccessControl(
+            agreementId,
+            address || "",
+            process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS || "",
+            currentStatus.currentState.cid
+          );
 
           // Don't mark as completed here - let the useEffect handle transaction confirmation
-          setIsProcessing(false);
-
+          // The transaction success will be handled by the useEffect that watches isAccessTxSuccess
+          setIsProcessing(false); // Allow manual progression while waiting for confirmation
+          console.debug("[useDeployment] End: filecoin_access_deploy step");
           return { success: true, txHash: "pending" };
         } catch (walletError) {
-          const errorMessage =
-            walletError instanceof Error
-              ? walletError.message
-              : String(walletError);
-          console.error("Filecoin store file error:", walletError);
-
-          // Check for specific error types
-          let displayError = errorMessage;
-          if (errorMessage.includes("execution reverted")) {
-            displayError =
-              "Transaction reverted. The file may already exist or access control failed.";
-          } else if (errorMessage.includes("User rejected")) {
-            displayError = "Transaction rejected by user.";
-          } else if (errorMessage.includes("insufficient funds")) {
-            displayError = "Insufficient funds for transaction.";
-          }
-
           await updateDeploymentStep(
-            "filecoin_store_file",
+            agreementId,
+            "filecoin_access_deploy",
             "failed",
             undefined,
             undefined,
-            displayError
+            `Wallet transaction failed: ${walletError}`
           );
-
-          // Ensure retry state is set
-          setIsProcessing(false);
-          setCanRetry(true);
-
-          // Force refresh deployment status to show failed state
-          await checkDeploymentStatus(true);
-
-          throw new Error(displayError);
+          throw new Error(`Wallet transaction failed: ${walletError}`);
         }
       } else if (stepName === "flow_deploy") {
+        console.debug("[useDeployment] Start: flow_deploy step");
         if (!isConnected || !address) {
           throw new Error(
             "Wallet not connected. Please connect your wallet first."
@@ -404,29 +246,11 @@ export const useDeployment = ({
             throw new Error(agreementData.error || "Failed to load agreement");
           }
 
-          const { depositA, depositB, signersData } = agreementData.agreement;
-
-          // Parse signers data to get partyB address if available
-          let partyBAddress: `0x${string}` | undefined;
-          if (signersData) {
-            try {
-              const signers = JSON.parse(signersData);
-              const otherSigner = signers.find((s: any) => s.role === "signer");
-              // For demo purposes, we'll use a test address if partyB email is provided
-              // In production, you'd look up the actual wallet address from email
-              if (otherSigner?.email && otherSigner.email !== address) {
-                // This is a placeholder - in real implementation you'd resolve email to wallet address
-                partyBAddress =
-                  "0x0000000000000000000000000000000000000000" as `0x${string}`;
-              }
-            } catch (e) {
-              console.warn("Failed to parse signers data:", e);
-            }
-          }
+          const { depositA, depositB } = agreementData.agreement;
 
           const createParams = {
+            agreementId: stringToHex(agreementId, { size: 32 }),
             partyA: address,
-            ...(partyBAddress && { partyB: partyBAddress }),
             mediator:
               (process.env.NEXT_PUBLIC_MEDIATOR_ADDRESS as `0x${string}`) || "",
             depositA: parseEther(depositA.toString()),
@@ -435,12 +259,19 @@ export const useDeployment = ({
             filecoinAccessControl:
               (process.env
                 .NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS as `0x${string}`) || "",
+            signOnCreate: true,
           };
 
           console.log("createParams", createParams);
 
           await createAgreement(createParams);
-
+          // Also update the partyA_address in the DB
+          await fetch(`/api/contracts/${agreementId}/deposit-status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ partyA_address: address }),
+          });
+          console.debug("[useDeployment] End: flow_deploy step");
           // Don't return immediately - let the useEffect handle transaction completion
           // The transaction success will be handled by the useEffect that watches isFlowDeploySuccess
           return;
@@ -465,14 +296,16 @@ export const useDeployment = ({
       if (result.success) {
         await checkDeploymentStatus(true);
 
-        // Handle step completion and chain switching for next step
+        // Handle step completion - just mark button as active for next step
         await handleStepCompletion(stepName, chainId, onError);
 
-        // Stop processing to allow manual progression
+        // Stop processing and activate next step button
         setIsProcessing(false);
+        setNextStepButtonActive(true);
 
         if (result.nextStep === "completed") {
           setCurrentStep("completed");
+          setNextStepButtonActive(false);
           const finalStatus = await checkDeploymentStatus(true);
           if (finalStatus?.isComplete) {
             onComplete(finalStatus.currentState);
@@ -486,6 +319,14 @@ export const useDeployment = ({
         error instanceof Error ? error.message : "Unknown error";
       setIsProcessing(false);
       setCanRetry(true);
+      await updateDeploymentStep(
+        agreementId,
+        stepName,
+        "failed",
+        undefined,
+        undefined,
+        errorMessage
+      );
       onError(`Deployment failed at ${stepDef.title}: ${errorMessage}`);
     }
   };
@@ -515,8 +356,9 @@ export const useDeployment = ({
 
       // Check for existing CID to avoid duplicate uploads
       if (status?.currentState?.cid) {
-        // CID exists, stop processing to allow manual progression
+        // CID exists, activate next step button
         setIsProcessing(false);
+        setNextStepButtonActive(true);
         return;
       }
 
@@ -535,22 +377,74 @@ export const useDeployment = ({
   };
 
   const executeNextPendingStep = async () => {
+    console.log("🚀 executeNextPendingStep: Starting execution");
+    console.log("📋 executeNextPendingStep: Current state", {
+      isConnected,
+      address,
+      chainId,
+      currentStep,
+      isProcessing,
+      agreementId,
+      nextStepButtonActive,
+    });
+
     if (!isConnected) {
+      console.log("❌ executeNextPendingStep: Wallet not connected");
       onError("Please connect your wallet first");
       return;
     }
 
+    console.log("✅ executeNextPendingStep: Wallet connected, proceeding");
+
     try {
+      console.log("📡 executeNextPendingStep: Checking deployment status...");
       const status = await checkDeploymentStatus();
+      console.log("📊 executeNextPendingStep: Deployment status result", {
+        hasStatus: !!status,
+        nextStep: status?.nextStep,
+        isComplete: status?.isComplete,
+        currentState: status?.currentState
+          ? {
+              cid: status.currentState.cid,
+              filecoinAccessControl: status.currentState.filecoinAccessControl,
+              flowContractAddr: status.currentState.flowContractAddr,
+              deploymentStepsCount:
+                status.currentState.deploymentSteps?.length || 0,
+            }
+          : null,
+      });
 
       if (status && status.nextStep) {
+        console.log(
+          `🎯 executeNextPendingStep: Found next step: ${status.nextStep}`
+        );
+
         // Check and switch to required chain before executing step
+        const requiredChain = getRequiredChainForStep(
+          status.nextStep as DeploymentStepName
+        );
+        console.log("🔗 executeNextPendingStep: Chain requirements", {
+          currentChainId: chainId,
+          requiredChainId: requiredChain,
+          needsSwitch: requiredChain && chainId !== requiredChain,
+          stepName: status.nextStep,
+        });
+
         const switchSuccess = await checkAndSwitchChainForStep(
           status.nextStep as DeploymentStepName,
           chainId
         );
 
+        console.log("🔄 executeNextPendingStep: Chain switch result", {
+          switchSuccess,
+          step: status.nextStep,
+          currentChainAfterSwitch: chainId,
+        });
+
         if (!switchSuccess) {
+          console.log(
+            `❌ executeNextPendingStep: Chain switch failed for ${status.nextStep}`
+          );
           onError(
             `Failed to switch to required chain for step: ${status.nextStep}`
           );
@@ -558,56 +452,178 @@ export const useDeployment = ({
         }
 
         if (status.currentState?.deploymentSteps) {
+          console.log(
+            "📝 executeNextPendingStep: Checking existing deployment steps",
+            {
+              totalSteps: status.currentState.deploymentSteps.length,
+              steps: status.currentState.deploymentSteps.map((s: any) => ({
+                stepName: s.stepName,
+                status: s.status,
+                txHash: s.txHash,
+                contractAddr: s.contractAddr,
+              })),
+            }
+          );
+
           const existingStep = status.currentState.deploymentSteps.find(
             (step: any) =>
               step.stepName === status.nextStep && step.status === "completed"
           );
 
+          console.log("🔍 executeNextPendingStep: Existing step check", {
+            foundExistingStep: !!existingStep,
+            stepName: existingStep?.stepName,
+            stepStatus: existingStep?.status,
+            stepTxHash: existingStep?.txHash,
+          });
+
           if (existingStep) {
+            console.log(
+              `✅ executeNextPendingStep: Step ${status.nextStep} already completed, finding next incomplete step`
+            );
+
             const nextIncompleteStep = stepOrder.find((step) => {
               const stepData = status.currentState.deploymentSteps.find(
                 (s: any) => s.stepName === step
               );
-              return !stepData || stepData.status !== "completed";
+              const isIncomplete = !stepData || stepData.status !== "completed";
+              console.log(`🔍 executeNextPendingStep: Checking step ${step}`, {
+                hasStepData: !!stepData,
+                stepStatus: stepData?.status,
+                isIncomplete,
+              });
+              return isIncomplete;
+            });
+
+            console.log("🎯 executeNextPendingStep: Next incomplete step", {
+              nextIncompleteStep,
+              allSteps: stepOrder,
+              stepOrderInfo: stepOrder.map((step) => ({
+                stepName: step,
+                status: getStepStatus(step),
+              })),
             });
 
             if (nextIncompleteStep) {
+              console.log(
+                `🔄 executeNextPendingStep: Switching chain for incomplete step: ${nextIncompleteStep}`
+              );
+
               // Check and switch chain for the incomplete step as well
+              const incompleteStepRequiredChain = getRequiredChainForStep(
+                nextIncompleteStep as DeploymentStepName
+              );
+              console.log(
+                "🔗 executeNextPendingStep: Incomplete step chain requirements",
+                {
+                  step: nextIncompleteStep,
+                  currentChainId: chainId,
+                  requiredChainId: incompleteStepRequiredChain,
+                  needsSwitch:
+                    incompleteStepRequiredChain &&
+                    chainId !== incompleteStepRequiredChain,
+                }
+              );
+
               const incompleteStepSwitchSuccess =
                 await checkAndSwitchChainForStep(
                   nextIncompleteStep as DeploymentStepName,
                   chainId
                 );
 
+              console.log(
+                "🔗 executeNextPendingStep: Incomplete step chain switch",
+                {
+                  step: nextIncompleteStep,
+                  switchSuccess: incompleteStepSwitchSuccess,
+                  currentChainAfterSwitch: chainId,
+                }
+              );
+
               if (!incompleteStepSwitchSuccess) {
+                console.log(
+                  `❌ executeNextPendingStep: Failed to switch chain for ${nextIncompleteStep}`
+                );
                 onError(
                   `Failed to switch to required chain for step: ${nextIncompleteStep}`
                 );
                 return;
               }
 
+              console.log(
+                `🚀 executeNextPendingStep: Executing incomplete step: ${nextIncompleteStep}`
+              );
+              console.log("📋 executeNextPendingStep: Pre-execution state", {
+                currentStep,
+                isProcessing,
+                nextStepButtonActive,
+              });
               await executeStep(nextIncompleteStep as DeploymentStepName);
             } else {
+              console.log(
+                "🎉 executeNextPendingStep: All steps completed, marking as done"
+              );
+              console.log("📋 executeNextPendingStep: Final completion state", {
+                deploymentState: status.currentState,
+              });
               setCurrentStep("completed");
               setIsProcessing(false);
+              setNextStepButtonActive(false);
               onComplete(status.currentState);
             }
             return;
           }
+        } else {
+          console.log(
+            "📝 executeNextPendingStep: No existing deployment steps found in currentState"
+          );
         }
 
+        console.log(
+          `🚀 executeNextPendingStep: Executing next step: ${status.nextStep}`
+        );
+        console.log("📋 executeNextPendingStep: Pre-execution state", {
+          currentStep,
+          isProcessing,
+          nextStepButtonActive,
+          stepToExecute: status.nextStep,
+        });
         await executeStep(status.nextStep as DeploymentStepName);
       } else if (status && status.isComplete) {
+        console.log("🎉 executeNextPendingStep: Deployment already complete");
+        console.log("📋 executeNextPendingStep: Complete deployment state", {
+          deploymentState: status.currentState,
+        });
         onComplete(status.currentState);
       } else {
+        console.log(
+          "🔄 executeNextPendingStep: No next step found, starting deployment"
+        );
+        console.log(
+          "📋 executeNextPendingStep: Starting deployment with params",
+          {
+            agreementId,
+            hasContractContent: !!contractContent,
+            fileName,
+          }
+        );
         await startDeployment();
       }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      console.error("Execute next step error:", error);
+      console.error("❌ executeNextPendingStep: Error occurred", {
+        error,
+        errorMessage,
+        errorStack: error instanceof Error ? error.stack : undefined,
+        currentStep,
+        isProcessing,
+        nextStepButtonActive,
+      });
       onError(`Failed to execute next step: ${errorMessage}`);
     }
+
+    console.log("🏁 executeNextPendingStep: Function completed");
   };
 
   const retryDeployment = async () => {
@@ -697,14 +713,6 @@ export const useDeployment = ({
       return "completed";
     }
 
-    // For filecoin_store_file, check if the process status indicates it's completed
-    if (
-      stepName === "filecoin_store_file" &&
-      deploymentState.processStatus === "filecoin_stored"
-    ) {
-      return "completed";
-    }
-
     if (stepName === "flow_deploy" && deploymentState.flowContractAddr) {
       return "completed";
     }
@@ -736,6 +744,7 @@ export const useDeployment = ({
   useEffect(() => {
     if (accessTxHash && currentStep === "filecoin_access_deploy") {
       updateDeploymentStep(
+        agreementId,
         "filecoin_access_deploy",
         "in_progress",
         accessTxHash
@@ -745,19 +754,15 @@ export const useDeployment = ({
     }
   }, [accessTxHash, currentStep]);
 
-  // Handle when flow transaction hash becomes available (both flow_deploy and filecoin_store_file)
+  // Handle when flow transaction hash becomes available
   useEffect(() => {
     if (flowTxHash && currentStep === "flow_deploy") {
-      updateDeploymentStep("flow_deploy", "in_progress", flowTxHash);
-      // Force refresh to show transaction hash immediately
-      checkDeploymentStatus(true);
-    }
-  }, [flowTxHash, currentStep]);
-
-  // Handle when storeFile transaction hash becomes available
-  useEffect(() => {
-    if (flowTxHash && currentStep === "filecoin_store_file") {
-      updateDeploymentStep("filecoin_store_file", "in_progress", flowTxHash);
+      updateDeploymentStep(
+        agreementId,
+        "flow_deploy",
+        "in_progress",
+        flowTxHash
+      );
       // Force refresh to show transaction hash immediately
       checkDeploymentStatus(true);
     }
@@ -772,48 +777,30 @@ export const useDeployment = ({
     ) {
       // Update step as completed with contract address
       updateDeploymentStep(
+        agreementId,
         "filecoin_access_deploy",
         "completed",
         accessTxHash,
         process.env.NEXT_PUBLIC_ACCESS_CONTROL_ADDRESS
       );
 
-      // Handle step completion and chain switching for next step
+      // Just handle step completion without auto-advancing
       handleStepCompletion("filecoin_access_deploy", chainId, onError);
 
-      // Refresh deployment status to show the success
+      // Refresh deployment status and activate next step button
       setTimeout(async () => {
         await checkDeploymentStatus(true);
         setIsProcessing(false);
+        setNextStepButtonActive(true);
       }, 1000);
     }
   }, [isAccessTxSuccess, accessTxHash, currentStep, chainId, onError]);
-
-  // Handle storeFile transaction confirmation
-  useEffect(() => {
-    if (
-      isStoreTxSuccess &&
-      flowTxHash &&
-      currentStep === "filecoin_store_file"
-    ) {
-      // Update step as completed
-      updateDeploymentStep("filecoin_store_file", "completed", flowTxHash);
-
-      // Handle step completion and chain switching for next step
-      handleStepCompletion("filecoin_store_file", chainId, onError);
-
-      // Refresh deployment status to show the success
-      setTimeout(async () => {
-        await checkDeploymentStatus(true);
-        setIsProcessing(false);
-      }, 1000);
-    }
-  }, [isStoreTxSuccess, flowTxHash, currentStep, chainId, onError]);
 
   // Handle access control errors
   useEffect(() => {
     if (accessError && currentStep === "filecoin_access_deploy") {
       updateDeploymentStep(
+        agreementId,
         "filecoin_access_deploy",
         "failed",
         accessTxHash || undefined,
@@ -826,34 +813,19 @@ export const useDeployment = ({
     }
   }, [accessError, currentStep]);
 
-  // Handle storeFile errors
-  useEffect(() => {
-    if (createError && currentStep === "filecoin_store_file") {
-      updateDeploymentStep(
-        "filecoin_store_file",
-        "failed",
-        flowTxHash || undefined,
-        undefined,
-        createError.message
-      );
-      setIsProcessing(false);
-      setCanRetry(true);
-      onError(`File storage failed: ${createError.message}`);
-    }
-  }, [createError, currentStep, flowTxHash]);
-
   // Handle flow transaction confirmation
   useEffect(() => {
-    if (isFlowDeploySuccess && flowTxHash && currentStep === "flow_deploy") {
+    if (isFlowSuccess && flowTxHash && currentStep === "flow_deploy") {
       // Update step as completed with contract address
       updateDeploymentStep(
+        agreementId,
         "flow_deploy",
         "completed",
         flowTxHash,
-        flowContractAddress || undefined
+        process.env.NEXT_PUBLIC_MULTISIG_ADDRESS
       );
 
-      // Handle step completion and chain switching for next step
+      // Handle step completion without auto-advancing
       handleStepCompletion("flow_deploy", chainId, onError);
 
       // Clear pending state
@@ -866,26 +838,22 @@ export const useDeployment = ({
         if (updatedStatus?.isComplete) {
           setCurrentStep("completed");
           setIsProcessing(false);
+          setNextStepButtonActive(false);
           onComplete(updatedStatus.currentState);
         } else {
-          // Stop processing to allow manual progression if there are more steps
+          // Stop processing and activate next step button
           setIsProcessing(false);
+          setNextStepButtonActive(true);
         }
       }, 2000);
     }
-  }, [
-    isFlowDeploySuccess,
-    flowTxHash,
-    currentStep,
-    flowContractAddress,
-    chainId,
-    onError,
-  ]);
+  }, [isFlowSuccess, flowTxHash, currentStep, chainId, onError]);
 
   // Handle flow agreement creation errors
   useEffect(() => {
     if (createError && currentStep === "flow_deploy") {
       updateDeploymentStep(
+        agreementId,
         "flow_deploy",
         "failed",
         flowTxHash || undefined,
@@ -911,11 +879,13 @@ export const useDeployment = ({
         if (status?.currentState) {
           const stepStatus = getStepStatus(currentStep as DeploymentStepName);
           if (stepStatus === "completed" && isProcessing) {
-            // Stop processing when step is completed, but don't auto-advance
+            // Stop processing and activate next step button
             setIsProcessing(false);
+            setNextStepButtonActive(true);
 
             if (status.isComplete) {
               setCurrentStep("completed");
+              setNextStepButtonActive(false);
               onComplete(status.currentState);
             }
           }
@@ -965,7 +935,7 @@ export const useDeployment = ({
       }
 
       // Reset the failed step to pending first
-      await updateDeploymentStep(stepName, "pending");
+      await updateDeploymentStep(agreementId, stepName, "pending");
 
       // Wait a moment for the database to update
       setTimeout(async () => {
@@ -990,6 +960,7 @@ export const useDeployment = ({
     isCreatingAccess,
     createError,
     accessError,
+    nextStepButtonActive,
     startDeployment,
     executeNextPendingStep,
     retryDeployment,

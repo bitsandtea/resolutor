@@ -124,7 +124,7 @@ const SigningSuccessPage: React.FC = () => {
               Go to Dashboard
             </button>
             <button
-              onClick={() => router.push(`/contracts/${agreementId}`)}
+              onClick={() => router.push(`/contract/${agreementId}`)}
               className="flex-1 bg-gray-500 text-white py-3 px-6 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
             >
               View Contract

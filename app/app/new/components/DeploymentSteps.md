@@ -79,25 +79,6 @@ The `useDeployment` hook orchestrates a multi-step blockchain deployment process
 
 ---
 
-### 3. Filecoin Store File (`filecoin_store_file`) 💾
-
-**Purpose**: Store the contract file in the Filecoin access control contract
-
-**What happens**:
-
-- Requires completed IPFS upload (CID available)
-- Requires completed Filecoin access control deployment
-- Calls `storeFile()` function with IPFS CID and agreement ID
-- Links the contract file to the agreement in the access control system
-- Establishes file storage permissions for authorized parties
-
-**Requirements**:
-
-- Connected wallet (address available)
-- Completed IPFS upload (CID required)
-- Completed Filecoin access control deployment
-- User should be connected to FileCoin Testnet Network which is stored in process.env.NEXT_PUBLIC_FILECOIN_CALIBRATION_CHAIN_ID
-
 **Output**:
 
 - File storage confirmation

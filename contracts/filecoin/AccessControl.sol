@@ -123,4 +123,31 @@ contract AccessControl {
         File storage file = files[fileCid];
         return (file.cid, file.agreementId, file.uploadedAt);
     }
+
+    function createAgreementWithFile(
+        string calldata agreementId,
+        address partyA,
+        address mediator,
+        string calldata fileCid
+    ) external {
+        require(!agreements[agreementId].isActive, "Agreement exists");
+        require(!files[fileCid].exists, "File exists");
+        
+        // Create agreement
+        Agreement storage agreement = agreements[agreementId];
+        agreement.partyA = partyA;
+        agreement.mediator = mediator;
+        agreement.isActive = true;
+        agreement.createdAt = block.timestamp;
+        
+        // Store file
+        File storage file = files[fileCid];
+        file.cid = fileCid;
+        file.agreementId = agreementId;
+        file.uploadedAt = block.timestamp;
+        file.exists = true;
+        
+        emit AgreementCreated(agreementId, partyA);
+        emit FileStored(fileCid, agreementId);
+    }
 } 

@@ -27,20 +27,8 @@ async function main() {
   console.log("Verifying AgreementFactory...");
   await verifyContract(factoryAddress, []);
 
-  // Get the implementation address
-  const implementationAddress = await factory.implementation();
-  console.log(
-    "MultiSigAgreement implementation deployed to:",
-    implementationAddress
-  );
-
-  // Verify MultiSigAgreement implementation
-  console.log("Verifying MultiSigAgreement implementation...");
-  await verifyContract(implementationAddress, []);
-
   console.log("\nDeployment completed!");
   console.log("Factory address:", factoryAddress);
-  console.log("Implementation address:", implementationAddress);
 
   // console.log("\nDeploying Mock USDC token...");
   // const MockToken = await hre.ethers.getContractFactory("MockERC20");

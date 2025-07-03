@@ -631,7 +631,6 @@ Powered by Resolutor`;
       if (result.success && result.draftId) {
         // Update draftId if it changed (e.g., new draft created due to old one not found)
         if (result.draftId !== draftId) {
-          console.log(`Draft ID changed from ${draftId} to ${result.draftId}`);
           setDraftId(result.draftId);
           localStorage.setItem("draftId", result.draftId);
 
@@ -669,7 +668,6 @@ Powered by Resolutor`;
         return;
       }
 
-      console.log("Loading draft with ID:", idToUse);
       const response = await fetch(`/api/save-draft?draftId=${idToUse}`);
       if (!response.ok) {
         if (response.status === 404) {
@@ -683,7 +681,6 @@ Powered by Resolutor`;
       }
 
       const result = await response.json();
-      console.log("Draft loaded successfully:", result);
 
       if (result.success && result.draft) {
         const draft = result.draft;
@@ -743,7 +740,6 @@ Powered by Resolutor`;
             const deploymentSteps = [
               "ipfs_upload",
               "filecoin_access_deploy",
-              "filecoin_store_file",
               "flow_deploy",
             ];
 

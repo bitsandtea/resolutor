@@ -8,17 +8,12 @@ export const stepDefinitions: Record<
   ipfs_upload: {
     title: "Upload to IPFS",
     description: "Uploading contract to decentralized storage",
-    icon: "📁",
+    icon: "��",
   },
   filecoin_access_deploy: {
-    title: "Deploy Access Control",
-    description: "Creating Filecoin access control contract",
+    title: "Deploy to Filecoin",
+    description: "Creating access control and storing file in one transaction",
     icon: "🔐",
-  },
-  filecoin_store_file: {
-    title: "Store File on Filecoin",
-    description: "Storing contract file in Filecoin access control",
-    icon: "💾",
   },
   flow_deploy: {
     title: "Create & Sign Agreement",
@@ -30,6 +25,5 @@ export const stepDefinitions: Record<
 export const stepOrder: DeploymentStepName[] = [
   "ipfs_upload",
   "filecoin_access_deploy",
-  "filecoin_store_file",
   "flow_deploy",
 ];
