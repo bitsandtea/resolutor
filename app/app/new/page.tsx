@@ -237,7 +237,7 @@ const NewContractPage: React.FC = () => {
   const getPlaceholderValue = (placeholderId: string): string => {
     const placeholderData: Record<string, string> = {
       OWNER_NAME: "John Smith",
-      RESIDENT_NAME: "Vitalik Buterin",
+      RESIDENT_NAME: "Vitalik Vooteryn",
       RENTAL_ADDRESS: "123 Crypto Street, Apt 4B",
       CITY: "San Francisco",
       RENT_AMOUNT: "2500",
@@ -498,8 +498,8 @@ const NewContractPage: React.FC = () => {
 
     const defaultSigner: ContractSigner = {
       id: "signer_" + Date.now(),
-      name: "Michael Davis",
-      email: "michael.davis@company.com",
+      name: "Vitalik Vooteryn",
+      email: "Vooteryn@kethereum.ca",
       role: "signer",
       status: "pending",
       depositAmount: 1000,

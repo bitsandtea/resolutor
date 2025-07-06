@@ -1,6 +1,7 @@
 "use client";
 
 import { formatContractContent } from "@/lib/contract-formatter";
+import { fetchIpfsContentWithFallback } from "@/lib/ipfs";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -29,6 +30,7 @@ interface Dispute {
   status: string;
   mediationResult?: MediatorOutput;
   payoutTxHash?: string | null;
+  requestedAmount?: number;
 }
 
 interface Agreement {
@@ -44,6 +46,8 @@ interface Agreement {
   disputes: Dispute[];
   partyA_address: string;
   partyB_address: string;
+  depositA: number;
+  depositB: number;
 }
 
 interface ContractSigner {
@@ -64,6 +68,7 @@ const DisputeResponseForm: React.FC<{
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -75,10 +80,12 @@ const DisputeResponseForm: React.FC<{
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setSubmissionStatus("Submitting your response...");
 
     try {
       let evidenceCids: string[] = [];
       if (evidenceFiles.length > 0) {
+        setSubmissionStatus("Uploading evidence...");
         const formData = new FormData();
         evidenceFiles.forEach((file) => {
           formData.append("files", file);
@@ -96,6 +103,9 @@ const DisputeResponseForm: React.FC<{
         evidenceCids = result.cids;
       }
 
+      setSubmissionStatus(
+        "Response submitted. Triggering automated mediation... This may take a moment."
+      );
       const response = await fetch("/api/dispute/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,16 +122,31 @@ const DisputeResponseForm: React.FC<{
         throw new Error(result.error || "Failed to submit response.");
       }
 
-      alert("Response submitted successfully!");
-      onResponseSubmitted();
+      setSubmissionStatus("Mediation complete! Refreshing data...");
+
+      // Refresh the page data after a short delay
+      setTimeout(() => {
+        onResponseSubmitted();
+      }, 2000);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred."
       );
     } finally {
       setIsSubmitting(false);
+      setSubmissionStatus(null);
     }
   };
+
+  if (isSubmitting) {
+    return (
+      <div className="mt-8 bg-white shadow-md rounded-lg p-6 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-gray-700 font-semibold">{submissionStatus}</p>
+        <p className="text-sm text-gray-500 mt-2">Please wait...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-8 bg-white shadow-md rounded-lg p-6">
@@ -175,7 +200,12 @@ const DisputeResponseForm: React.FC<{
   );
 };
 
-const DisputeDetails: React.FC<{ dispute: Dispute }> = ({ dispute }) => {
+const DisputeDetails: React.FC<{
+  dispute: Dispute;
+  agreement: Agreement;
+  partyA: ContractSigner | undefined;
+  partyB: ContractSigner | undefined;
+}> = ({ dispute, agreement, partyA, partyB }) => {
   return (
     <div className="mt-8 bg-white shadow-md rounded-lg p-6">
       <div className="flex justify-between items-center mb-4">
@@ -263,50 +293,212 @@ const DisputeDetails: React.FC<{ dispute: Dispute }> = ({ dispute }) => {
         )}
       </div>
       {(dispute.status === "mediated" ||
+        dispute.status === "resolved" ||
         dispute.status === "mediated_execution_failed") &&
         dispute.mediationResult && (
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-xl font-bold text-green-700">
-              AI Mediator Resolution
-            </h3>
-            <div className="mt-4 space-y-4">
-              <div>
-                <h4 className="font-semibold text-gray-700">Rationale:</h4>
-                <p className="text-gray-600">
-                  {dispute.mediationResult.rationale}
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-700">Action:</h4>
-                <p className="text-gray-600 capitalize">
-                  {dispute.mediationResult.decision
-                    .replace(/([A-Z])/g, " $1")
-                    .trim()}
-                </p>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
+              <div className="flex items-center mb-6">
+                <div className="flex-shrink-0 mr-4">
+                  <img
+                    src="/judge.png"
+                    alt="AI Judge"
+                    className="w-16 h-16 rounded-full border-2 border-blue-300 shadow-lg"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800 mb-1">
+                    ⚖️ Official AI Mediation Judgment
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Rendered by Autonomous yet FAIR AI Mediator •{" "}
+                    {new Date().toLocaleDateString()}
+                  </p>
+                </div>
               </div>
 
-              {dispute.payoutTxHash ? (
-                <div>
-                  <h4 className="font-semibold text-gray-700">
-                    Execution Transaction:
+              <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                    📋 Judicial Rationale
                   </h4>
-                  <a
-                    href={`https://calibration.filscan.io/tx/${dispute.payoutTxHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline break-all"
-                  >
-                    {dispute.payoutTxHash}
-                  </a>
+                  <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-blue-500">
+                    <p className="text-gray-700 leading-relaxed italic">
+                      "{dispute.mediationResult.rationale}"
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                dispute.status === "mediated_execution_failed" && (
-                  <p className="text-sm text-red-500">
-                    Automated execution on-chain failed. Please check server
-                    logs.
+
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                    ⚡ Court Decision
+                  </h4>
+                  <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                    <p className="text-green-800 font-semibold text-lg">
+                      {dispute.mediationResult.decision === "approveResolution"
+                        ? "✅ RESOLUTION APPROVED & EXECUTED"
+                        : dispute.mediationResult.decision ===
+                          "proposeAlternative"
+                        ? "📋 ALTERNATIVE RESOLUTION PROPOSED"
+                        : "❌ RESOLUTION DENIED"}
+                    </p>
+                  </div>
+                </div>
+
+                {dispute.status === "resolved" && dispute.payoutTxHash && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                      💰 Fund Transfer Executed
+                    </h4>
+                    <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                      <div className="space-y-3">
+                        {(() => {
+                          const totalDeposit =
+                            (agreement.depositA || 0) +
+                            (agreement.depositB || 0);
+                          const disputeOpener = dispute?.opener;
+                          const requestedAmount = dispute?.requestedAmount || 0;
+
+                          // Calculate amounts based on who opened the dispute
+                          let amountToA, amountToB;
+                          if (disputeOpener === agreement.partyA_address) {
+                            // Party A opened dispute
+                            amountToA = requestedAmount;
+                            amountToB = totalDeposit - requestedAmount;
+                          } else {
+                            // Party B opened dispute
+                            amountToA = totalDeposit - requestedAmount;
+                            amountToB = requestedAmount;
+                          }
+
+                          return (
+                            <>
+                              <div className="bg-white rounded-md p-3 border border-green-200">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3">
+                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                      <span className="text-green-600 font-semibold text-sm">
+                                        {partyA?.name?.charAt(0) || "A"}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-gray-800">
+                                        {partyA?.name || "Party A"}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        Received
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-green-600">
+                                      {amountToA.toFixed(2)} tokens
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="bg-white rounded-md p-3 border border-green-200">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3">
+                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                      <span className="text-blue-600 font-semibold text-sm">
+                                        {partyB?.name?.charAt(0) || "B"}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-gray-800">
+                                        {partyB?.name || "Party B"}
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        Received
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-blue-600">
+                                      {amountToB.toFixed(2)} tokens
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="text-center text-sm text-gray-600 bg-gray-50 rounded-md p-2">
+                                <span className="font-medium">
+                                  Total Distributed:
+                                </span>{" "}
+                                {totalDeposit.toFixed(2)} tokens
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {dispute.status === "resolved" && dispute.payoutTxHash && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                      🔗 Blockchain Execution
+                    </h4>
+                    <div className="bg-blue-50 rounded-lg p-4 border-l-4 border-blue-500">
+                      <p className="text-sm text-gray-600 mb-2">
+                        Transaction executed on Flow EVM Testnet:
+                      </p>
+                      <a
+                        href={`https://evm-testnet.flowscan.io/tx/${dispute.payoutTxHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        🔍 View Transaction
+                        <svg
+                          className="ml-1 w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                          />
+                        </svg>
+                      </a>
+                      <p className="text-xs text-gray-500 mt-2 font-mono break-all">
+                        {dispute.payoutTxHash}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {dispute.status === "mediated_execution_failed" && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-red-700 mb-3 flex items-center">
+                      ⚠️ Execution Status
+                    </h4>
+                    <div className="bg-red-50 rounded-lg p-4 border-l-4 border-red-500">
+                      <p className="text-red-700 font-medium">
+                        Judgment rendered but automated blockchain execution
+                        failed.
+                      </p>
+                      <p className="text-red-600 text-sm mt-1">
+                        Manual intervention may be required. Please contact
+                        support.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t pt-4">
+                  <p className="text-xs text-gray-500 text-center">
+                    This judgment is final and has been recorded on the
+                    blockchain. Both parties are legally bound by this decision.
                   </p>
-                )
-              )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -363,24 +555,8 @@ const ContractViewPage: React.FC = () => {
 
     const fetchIpfsContent = async () => {
       try {
-        const gateways = [
-          `https://gateway.lighthouse.storage/ipfs/${agreement.cid}`,
-          `https://ipfs.io/ipfs/${agreement.cid}`,
-          `https://cloudflare-ipfs.com/ipfs/${agreement.cid}`,
-        ];
-
-        for (const gateway of gateways) {
-          try {
-            const response = await fetch(gateway);
-            if (response.ok) {
-              setIpfsContent(await response.text());
-              return;
-            }
-          } catch (gatewayError) {
-            console.warn(`Failed to fetch from ${gateway}:`, gatewayError);
-          }
-        }
-        throw new Error("Failed to fetch from all IPFS gateways");
+        const content = await fetchIpfsContentWithFallback(agreement.cid!);
+        setIpfsContent(content);
       } catch (err) {
         console.error("Error fetching IPFS content:", err);
         setIpfsContent("Failed to load IPFS content");
@@ -562,7 +738,14 @@ const ContractViewPage: React.FC = () => {
                 </div>
               </div>
 
-              {latestDispute && <DisputeDetails dispute={latestDispute} />}
+              {latestDispute && (
+                <DisputeDetails
+                  dispute={latestDispute}
+                  agreement={agreement}
+                  partyA={partyA}
+                  partyB={partyB}
+                />
+              )}
 
               {canRespondToDispute && address && (
                 <DisputeResponseForm

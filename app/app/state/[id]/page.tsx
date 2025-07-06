@@ -2,6 +2,7 @@
 
 import { AccessControlABI, AgreementFactoryABI } from "@/lib/ABIs";
 import { formatContractContent } from "@/lib/contract-formatter";
+import { fetchIpfsContentWithFallback } from "@/lib/ipfs";
 import {
   CheckCircleIcon,
   ClockIcon,
@@ -353,24 +354,8 @@ const StateReaderPage: React.FC = () => {
     const fetchIpfsContent = async () => {
       try {
         setLoadingState("Loading IPFS content...");
-        const gateways = [
-          `https://gateway.lighthouse.storage/ipfs/${agreement.cid}`,
-          `https://ipfs.io/ipfs/${agreement.cid}`,
-          `https://cloudflare-ipfs.com/ipfs/${agreement.cid}`,
-        ];
-
-        for (const gateway of gateways) {
-          try {
-            const response = await fetch(gateway);
-            if (response.ok) {
-              setIpfsContent(await response.text());
-              return;
-            }
-          } catch (gatewayError) {
-            console.warn(`Failed to fetch from ${gateway}:`, gatewayError);
-          }
-        }
-        throw new Error("Failed to fetch from all IPFS gateways");
+        const content = await fetchIpfsContentWithFallback(agreement.cid!);
+        setIpfsContent(content);
       } catch (err) {
         console.error("Error fetching IPFS content:", err);
         setIpfsContent("Failed to load IPFS content");

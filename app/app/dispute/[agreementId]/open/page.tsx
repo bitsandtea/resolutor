@@ -8,6 +8,7 @@ import { parseEther, stringToHex } from "viem";
 import { useAccount, useSwitchChain, useWriteContract } from "wagmi";
 import Footer from "../../../../components/Footer";
 import Header from "../../../../components/Header";
+import FilePreview from "../../../components/dispute/FilePreview";
 
 interface AgreementData {
   id: string;
@@ -26,6 +27,7 @@ const OpenDisputePage: React.FC = () => {
   const { writeContractAsync } = useWriteContract();
 
   const agreementId = params.agreementId as string;
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [agreement, setAgreement] = useState<AgreementData | null>(null);
   const [summary, setSummary] = useState("");
@@ -35,6 +37,7 @@ const OpenDisputePage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   useEffect(() => {
     if (!agreementId) return;
@@ -69,14 +72,22 @@ const OpenDisputePage: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      if (e.target.files.length > 3) {
+      const newFiles = Array.from(e.target.files);
+      if (evidenceFiles.length + newFiles.length > 3) {
         setError("You can upload a maximum of 3 files.");
-        setEvidenceFiles([]);
-        e.target.value = ""; // Reset the input
         return;
       }
-      setEvidenceFiles(Array.from(e.target.files));
+      setEvidenceFiles((prevFiles) => [...prevFiles, ...newFiles]);
     }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setEvidenceFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+    // Clear the file input and reset its key to allow re-selecting the same file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setFileInputKey((prev) => prev + 1);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,11 +124,18 @@ const OpenDisputePage: React.FC = () => {
         throw new Error("Flow contract address not found for this agreement.");
       }
 
+      const autoApproveResolution = true;
+
       const txHash = await writeContractAsync({
         address: agreement.flowContractAddr as `0x${string}`,
         abi: AgreementFactoryABI,
         functionName: "openDisputeAndPropose",
-        args: [agreementIdBytes, amountToABigInt, amountToBBigInt],
+        args: [
+          agreementIdBytes,
+          amountToABigInt,
+          amountToBBigInt,
+          autoApproveResolution,
+        ],
       });
 
       // 2. Upload evidence (if any)
@@ -151,7 +169,8 @@ const OpenDisputePage: React.FC = () => {
           summary,
           evidenceCids,
           requestedAmount: parsedAmountA + parsedAmountB,
-          txHash, // Include transaction hash
+          txHash, // Include dispute opening transaction hash
+          autoApproved: autoApproveResolution, // Include auto-approval flag
         }),
       });
 
@@ -253,22 +272,22 @@ const OpenDisputePage: React.FC = () => {
                   <input
                     type="file"
                     id="evidence"
-                    multiple
+                    ref={fileInputRef}
+                    key={fileInputKey}
                     onChange={handleFileChange}
-                    className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
+                    multiple
+                    accept="image/*,application/pdf,.doc,.docx,.txt"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Upload any relevant documents, images, or other files. Max 3
-                    files.
-                  </p>
                   {evidenceFiles.length > 0 && (
-                    <div className="mt-2 text-xs text-gray-600">
-                      <p>Selected files:</p>
-                      <ul className="list-disc pl-5">
-                        {evidenceFiles.map((file, i) => (
-                          <li key={i}>{file.name}</li>
-                        ))}
-                      </ul>
+                    <div className="mt-4 grid grid-cols-3 gap-4">
+                      {evidenceFiles.map((file, i) => (
+                        <FilePreview
+                          key={i}
+                          file={file}
+                          onRemove={() => handleRemoveFile(i)}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>

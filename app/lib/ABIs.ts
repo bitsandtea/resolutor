@@ -339,6 +339,11 @@ export const AgreementFactoryABI = [
         name: "_amountToB",
         type: "uint256",
       },
+      {
+        internalType: "bool",
+        name: "_approve",
+        type: "bool",
+      },
     ],
     name: "openDisputeAndPropose",
     outputs: [],

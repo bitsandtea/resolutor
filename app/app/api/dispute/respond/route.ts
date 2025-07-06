@@ -1,3 +1,4 @@
+import { triggerMediation } from "@/lib/mediation";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -65,17 +66,20 @@ export async function POST(req: NextRequest) {
         responder: responderAddr,
         responderSummary: summary,
         responderEvidenceCids: evidenceCids || [],
-        status: "negotiating",
+        status: "mediating",
       },
     });
 
+    // Trigger mediation after response
+    const updatedDisputeWithMediation = await triggerMediation(agreementId);
+
     return NextResponse.json({
       success: true,
-      dispute: updatedDispute,
-      message: "Dispute response submitted successfully.",
+      message: "Response submitted and mediation completed.",
+      dispute: updatedDisputeWithMediation,
     });
   } catch (error) {
-    console.error("Error submitting dispute response:", error);
+    console.error("Error responding to dispute:", error);
     const message =
       error instanceof Error ? error.message : "An unknown error occurred.";
     return NextResponse.json(

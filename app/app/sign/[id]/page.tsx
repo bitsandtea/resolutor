@@ -3,6 +3,7 @@
 import AddressDisplay from "@/components/AddressDisplay";
 import { AgreementFactoryABI, MockERC20ABI } from "@/lib/ABIs";
 import { formatContractContent } from "@/lib/contract-formatter";
+import { fetchIpfsContentWithFallback } from "@/lib/ipfs";
 import { CONTRACT_ADDRESSES } from "@/lib/wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useParams, useRouter } from "next/navigation";
@@ -208,31 +209,11 @@ const SignContractPage: React.FC = () => {
     const fetchIpfsContent = async () => {
       try {
         setLoadingMessage("Loading contract content from IPFS...");
-        const gateways = [
-          `https://gateway.lighthouse.storage/ipfs/${agreement.cid}`,
-          `https://ipfs.io/ipfs/${agreement.cid}`,
-          `https://cloudflare-ipfs.com/ipfs/${agreement.cid}`,
-        ];
-
-        for (const gateway of gateways) {
-          try {
-            const response = await fetch(gateway);
-            if (response.ok) {
-              const content = await response.text();
-              setIpfsContent(content);
-              return;
-            }
-          } catch (gatewayError) {
-            console.warn(`Failed to fetch from ${gateway}:`, gatewayError);
-          }
-        }
-
-        // Fallback to local content if IPFS fails
-        if (contractContent) {
-          setIpfsContent(contractContent);
-        } else {
-          throw new Error("Failed to fetch from all IPFS gateways");
-        }
+        const content = await fetchIpfsContentWithFallback(
+          agreement.cid!,
+          contractContent
+        );
+        setIpfsContent(content);
       } catch (error) {
         console.error("Error fetching IPFS content:", error);
         setIpfsContent(contractContent || "Failed to load contract content");

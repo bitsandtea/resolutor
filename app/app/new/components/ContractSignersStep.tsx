@@ -20,10 +20,8 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
   isLoading,
   inputBaseClasses,
 }) => {
-  const [newSignerName, setNewSignerName] = useState("Michael Davis");
-  const [newSignerEmail, setNewSignerEmail] = useState(
-    "michael.davis@company.com"
-  );
+  const [newSignerName, setNewSignerName] = useState("Vitalik Vooteryn");
+  const [newSignerEmail, setNewSignerEmail] = useState("Vooteryn@kethereum.ca");
   const [newSignerDeposit, setNewSignerDeposit] = useState<number>(1000);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -348,7 +346,7 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
                 value={newSignerName}
                 onChange={(e) => setNewSignerName(e.target.value)}
                 className={inputBaseClasses}
-                placeholder="e.g., Michael Davis"
+                placeholder="e.g., Vitalik Vooteryn"
               />
             </div>
             <div>
@@ -360,7 +358,7 @@ const ContractSignersStep: React.FC<ContractSignersStepProps> = ({
                 value={newSignerEmail}
                 onChange={(e) => setNewSignerEmail(e.target.value)}
                 className={inputBaseClasses}
-                placeholder="michael.davis@company.com or 0x..."
+                placeholder="Vooteryn@kethereum.ca or 0x..."
               />
             </div>
             <div>

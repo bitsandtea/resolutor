@@ -5,6 +5,16 @@ import path from "path";
 import { prisma } from "./prisma";
 
 /**
+ * IPFS Gateway Configuration
+ */
+const IPFS_GATEWAYS = [
+  "https://gateway.lighthouse.storage/ipfs/",
+  "https://ipfs.io/ipfs/",
+  "https://dweb.link/ipfs/",
+  "https://gateway.pinata.cloud/ipfs/",
+] as const;
+
+/**
  * Pins a file to IPFS using Lighthouse.storage (Filecoin-based storage).
  *
  * This function uploads content to IPFS through Filecoin storage deals
@@ -319,33 +329,191 @@ export async function uploadJsonToIPFS(
  */
 export async function uploadToIPFS(file: File): Promise<string> {
   const content = await file.text();
-  return await pinToIPFSSimple(content, file.name);
+  const filename = file.name;
+  const apiKey = process.env.LIGHTHOUSE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "LIGHTHOUSE_API_KEY must be set in environment variables. Get your API key from https://lighthouse.storage"
+    );
+  }
+
+  const tempDir = tmpdir();
+  const tempFilePath = path.join(tempDir, filename);
+
+  try {
+    await fs.writeFile(tempFilePath, content, "utf8");
+
+    const uploadResponse = await lighthouse.upload(tempFilePath, apiKey);
+
+    const cid = uploadResponse.data.Hash;
+    console.log(`File uploaded to IPFS via Lighthouse: ${cid}`);
+    return cid;
+  } catch (error) {
+    console.error("Error uploading to Lighthouse:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    throw new Error(`Failed to upload to IPFS via Lighthouse: ${errorMessage}`);
+  } finally {
+    try {
+      await fs.unlink(tempFilePath);
+    } catch (cleanupError) {
+      console.warn("Failed to clean up temporary file:", cleanupError);
+    }
+  }
 }
 
 /**
- * Fetches content from IPFS using public gateways.
+ * Fetches content from IPFS using multiple gateway fallbacks with timeout and retry logic.
  *
  * @param {string} cid The IPFS CID to fetch.
+ * @param {number} timeoutMs Timeout in milliseconds for each gateway attempt (default: 10000ms).
+ * @returns {Promise<string>} The content of the file as a string.
+ * @throws {Error} If all gateways fail to fetch the content.
+ */
+export async function fetchIpfsContent(
+  cid: string,
+  timeoutMs: number = 10000
+): Promise<string> {
+  if (!cid) {
+    throw new Error("CID is required");
+  }
+
+  const errors: string[] = [];
+
+  for (const gateway of IPFS_GATEWAYS) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(`${gateway}${cid}`, {
+        signal: controller.signal,
+        headers: {
+          Accept: "text/plain,text/markdown,text/*,*/*",
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const content = await response.text();
+        console.log(`Successfully fetched content from ${gateway}${cid}`);
+        return content;
+      } else {
+        const error = `Gateway ${gateway} returned ${response.status}: ${response.statusText}`;
+        console.warn(error);
+        errors.push(error);
+      }
+    } catch (gatewayError) {
+      const error = `Gateway ${gateway} failed: ${
+        gatewayError instanceof Error
+          ? gatewayError.message
+          : String(gatewayError)
+      }`;
+      console.warn(error);
+      errors.push(error);
+    }
+  }
+
+  throw new Error(
+    `Failed to fetch content for CID ${cid} from all IPFS gateways. Errors: ${errors.join(
+      "; "
+    )}`
+  );
+}
+
+/**
+ * Fetches content from IPFS with a fallback to local content.
+ *
+ * @param {string} cid The IPFS CID to fetch.
+ * @param {string | null} fallbackContent Fallback content to use if IPFS fails.
+ * @param {number} timeoutMs Timeout in milliseconds for each gateway attempt.
  * @returns {Promise<string>} The content of the file as a string.
  */
-export async function fetchIpfsContent(cid: string): Promise<string> {
-  const gateways = [
-    `https://gateway.lighthouse.storage/ipfs/${cid}`,
-    `https://ipfs.io/ipfs/${cid}`,
-    `https://cloudflare-ipfs.com/ipfs/${cid}`,
-  ];
+export async function fetchIpfsContentWithFallback(
+  cid: string,
+  fallbackContent: string | null = null,
+  timeoutMs: number = 10000
+): Promise<string> {
+  try {
+    return await fetchIpfsContent(cid, timeoutMs);
+  } catch (error) {
+    console.error(`IPFS fetch failed for CID ${cid}:`, error);
+
+    if (fallbackContent) {
+      console.log(`Using fallback content for CID ${cid}`);
+      return fallbackContent;
+    }
+
+    return "Failed to load content from IPFS and no fallback provided";
+  }
+}
+
+/**
+ * Gets the best available IPFS gateway URL for a given CID.
+ *
+ * @param {string} cid The IPFS CID.
+ * @returns {string} The full URL to the IPFS content using the preferred gateway.
+ */
+export function getIpfsGatewayUrl(cid: string): string {
+  if (!cid) {
+    throw new Error("CID is required");
+  }
+  return `${IPFS_GATEWAYS[0]}${cid}`;
+}
+
+/**
+ * Gets all available IPFS gateway URLs for a given CID.
+ *
+ * @param {string} cid The IPFS CID.
+ * @returns {string[]} Array of full URLs to the IPFS content using all available gateways.
+ */
+export function getAllIpfsGatewayUrls(cid: string): string[] {
+  if (!cid) {
+    throw new Error("CID is required");
+  }
+  return IPFS_GATEWAYS.map((gateway) => `${gateway}${cid}`);
+}
+
+/**
+ * Gets the content type of a file from IPFS using a HEAD request.
+ *
+ * @param {string} cid The IPFS CID.
+ * @returns {Promise<string | null>} The content type of the file.
+ */
+export async function getIpfsContentType(cid: string): Promise<string | null> {
+  const gateways = getAllIpfsGatewayUrls(cid);
+  for (const gateway of gateways) {
+    try {
+      const response = await fetch(gateway, { method: "HEAD" });
+      if (response.ok) {
+        return response.headers.get("content-type");
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch HEAD from ${gateway}:`, error);
+    }
+  }
+  return null;
+}
+
+export async function fetchIpfsFileAsBase64(
+  cid: string
+): Promise<{ content: string; contentType: string | null }> {
+  const gateways = getAllIpfsGatewayUrls(cid);
 
   for (const gateway of gateways) {
     try {
       const response = await fetch(gateway);
       if (response.ok) {
-        return await response.text();
+        const contentType = response.headers.get("content-type");
+        const buffer = await response.arrayBuffer();
+        const content = Buffer.from(buffer).toString("base64");
+        return { content, contentType };
       }
-    } catch (gatewayError) {
-      console.warn(`Failed to fetch from ${gateway}:`, gatewayError);
+    } catch (error) {
+      console.warn(`Failed to fetch from ${gateway}:`, error);
     }
   }
-  throw new Error(
-    `Failed to fetch content for CID ${cid} from all IPFS gateways`
-  );
+
+  throw new Error(`Failed to fetch content for CID ${cid} from all gateways`);
 }

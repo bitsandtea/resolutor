@@ -1,4 +1,5 @@
 "use client";
+import FilePreview from "@/app/components/dispute/FilePreview";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useParams, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ const RespondToDisputePage: React.FC = () => {
   const { writeContractAsync } = useWriteContract();
 
   const agreementId = params.agreementId as string;
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [dispute, setDispute] = useState<DisputeData | null>(null);
   const [summary, setSummary] = useState("");
@@ -33,6 +35,8 @@ const RespondToDisputePage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [submissionStatus, setSubmissionStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!agreementId) return;
@@ -63,14 +67,22 @@ const RespondToDisputePage: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      if (e.target.files.length > 3) {
-        setError("You can upload a maximum of 3 files.");
-        setEvidenceFiles([]);
-        e.target.value = ""; // Reset the input
+      const newFiles = Array.from(e.target.files);
+      if (evidenceFiles.length + newFiles.length > 5) {
+        setError("You can upload a maximum of 5 files.");
         return;
       }
-      setEvidenceFiles(Array.from(e.target.files));
+      setEvidenceFiles((prevFiles) => [...prevFiles, ...newFiles]);
     }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setEvidenceFiles((prevFiles) => prevFiles.filter((_, i) => i !== index));
+    // Clear the file input and reset its key to allow re-selecting the same file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setFileInputKey((prev) => prev + 1);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,13 +95,10 @@ const RespondToDisputePage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // For responding, we might not need an immediate on-chain transaction,
-      // just updating the DB with evidence. The on-chain part could be separate
-      // (approving or proposing a new resolution).
-
       // 1. Upload evidence (if any)
       let evidenceCids: string[] = [];
       if (evidenceFiles.length > 0) {
+        setSubmissionStatus("Uploading evidence...");
         const formData = new FormData();
         evidenceFiles.forEach((file) => {
           formData.append("files", file);
@@ -109,6 +118,9 @@ const RespondToDisputePage: React.FC = () => {
       }
 
       // 2. Update database via API
+      setSubmissionStatus(
+        "Response submitted. Triggering automated mediation... This may take a moment."
+      );
       const disputeResponse = await fetch("/api/dispute/respond", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,12 +137,18 @@ const RespondToDisputePage: React.FC = () => {
         throw new Error(disputeResult.error || "Failed to respond to dispute.");
       }
 
-      router.push(`/contract/${agreementId}`);
+      setSubmissionStatus("Mediation complete! Refreshing data...");
+
+      // Show success message and redirect after a short delay
+      setTimeout(() => {
+        router.push(`/contract/${agreementId}`);
+      }, 2000);
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred.";
       setError(message);
     } finally {
       setIsSubmitting(false);
+      setSubmissionStatus(null);
     }
   };
 
@@ -211,6 +229,15 @@ const RespondToDisputePage: React.FC = () => {
               </div>
             )}
 
+            {submissionStatus && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded mb-4">
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  {submissionStatus}
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit}>
               <div className="space-y-6">
                 <div>
@@ -238,27 +265,27 @@ const RespondToDisputePage: React.FC = () => {
                     htmlFor="evidence"
                     className="block text-sm font-medium text-gray-700"
                   >
-                    Supporting Evidence (Up to 3 files)
+                    Your Supporting Evidence (Up to 5 files)
                   </label>
                   <input
                     type="file"
                     id="evidence"
-                    multiple
+                    ref={fileInputRef}
+                    key={fileInputKey}
                     onChange={handleFileChange}
-                    className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
+                    multiple
+                    accept="image/*,application/pdf,.doc,.docx,.txt"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Upload any relevant documents, images, or other files. Max 3
-                    files.
-                  </p>
                   {evidenceFiles.length > 0 && (
-                    <div className="mt-2 text-xs text-gray-600">
-                      <p>Selected files:</p>
-                      <ul className="list-disc pl-5">
-                        {evidenceFiles.map((file, i) => (
-                          <li key={i}>{file.name}</li>
-                        ))}
-                      </ul>
+                    <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                      {evidenceFiles.map((file, i) => (
+                        <FilePreview
+                          key={i}
+                          file={file}
+                          onRemove={() => handleRemoveFile(i)}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>

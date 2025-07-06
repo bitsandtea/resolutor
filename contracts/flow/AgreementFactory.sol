@@ -317,6 +317,49 @@ contract AgreementFactory is ReentrancyGuard {
         emit ResolutionProposed(_agreementId, msg.sender);
     }
 
+    function openDisputeAndPropose(
+        bytes32 _agreementId,
+        uint256 _amountToA,
+        uint256 _amountToB,
+        bool _approve
+    )
+        external
+        nonReentrant
+        onlyPartyAOrB(_agreementId)
+        onlyWhenSigned(_agreementId)
+    {
+        Agreement storage agreement = agreements[_agreementId];
+        require(agreement.status == Status.Active, "Agreement must be active");
+        agreement.status = Status.Disputed;
+        emit DisputeOpened(_agreementId, msg.sender);
+
+        require(
+            _amountToA + _amountToB == agreement.balance,
+            "Amounts must sum to total deposits"
+        );
+
+        Proposal storage p = proposals[_agreementId];
+        p.amountToA = _amountToA;
+        p.amountToB = _amountToB;
+        p.approvalCount = 0;
+        p.approvals[agreement.partyA] = false;
+        p.approvals[agreement.partyB] = false;
+        p.approvals[agreement.mediator] = false;
+
+        emit ResolutionProposed(_agreementId, msg.sender);
+
+        if (_approve) {
+            require(!p.approvals[msg.sender], "Already approved");
+            p.approvals[msg.sender] = true;
+            p.approvalCount++;
+            emit ResolutionApproved(_agreementId, msg.sender);
+
+            if (p.approvalCount >= 2) {
+                _executeResolution(_agreementId);
+            }
+        }
+    }
+
     function approveResolution(bytes32 _agreementId)
         external
         nonReentrant

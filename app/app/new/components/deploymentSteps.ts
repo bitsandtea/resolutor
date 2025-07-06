@@ -8,7 +8,7 @@ export const stepDefinitions: Record<
   ipfs_upload: {
     title: "Upload to IPFS",
     description: "Uploading contract to decentralized storage",
-    icon: "��",
+    icon: "💾",
   },
   filecoin_access_deploy: {
     title: "Deploy to Filecoin",
