@@ -171,7 +171,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 };
 
 const DeploymentStatus: React.FC<{ steps: DeploymentStep[] }> = ({ steps }) => {
-  const getIcon = (status: DeploymentStep["status"]) => {
+  const getIcon = (status: DeploymentStep["status"]): React.ReactNode => {
     switch (status) {
       case "completed":
         return <CheckCircleIcon className="h-6 w-6 text-green-500" />;

@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const agreementId = params.id;
+    const { id: agreementId } = await params;
     const body = await req.json();
     const { partyA, partyB, depositAPaid, depositBPaid, partyA_address } = body;
 
@@ -30,7 +30,7 @@ export async function PATCH(
     }
 
     // Prepare update data
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     if (depositAPaid !== undefined) {
       updateData.depositAPaid = depositAPaid;
@@ -109,10 +109,10 @@ export async function PATCH(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const agreementId = params.id;
+    const { id: agreementId } = await params;
     const body = await req.json();
     const { depositPaid, partyB_address } = body;
 
@@ -134,7 +134,7 @@ export async function POST(
       );
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     if (depositPaid !== undefined) {
       updateData.depositBPaid = depositPaid;

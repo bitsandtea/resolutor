@@ -26,6 +26,36 @@ const nextConfig = {
     config.externals = config.externals || [];
     config.externals.push("pino-pretty");
 
+    config.module.rules.push({
+      test: /HeartbeatWorker\.js$/,
+      type: "asset/resource",
+      generator: {
+        filename: "static/workers/[hash][ext][query]",
+        publicPath: "/_next/static/workers/",
+      },
+    });
+
+    // Exclude the generated HeartbeatWorker bundle from Terser minification
+    if (Array.isArray(config.optimization?.minimizer)) {
+      config.optimization.minimizer.forEach((minimizer) => {
+        if (minimizer?.constructor?.name === "TerserPlugin") {
+          const existingExcludes = minimizer.options?.exclude
+            ? Array.isArray(minimizer.options.exclude)
+              ? minimizer.options.exclude
+              : [minimizer.options.exclude]
+            : [];
+          minimizer.options = {
+            ...minimizer.options,
+            exclude: [
+              ...existingExcludes,
+              /HeartbeatWorker/,
+              /static[\\/]workers[\\/].*\.js$/,
+            ],
+          };
+        }
+      });
+    }
+
     return config;
   },
 };

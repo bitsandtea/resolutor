@@ -19,7 +19,7 @@ import DeploymentProgressStep from "./components/DeploymentProgressStep";
 
 // Custom hook for intervals
 function useInterval(callback: () => void, delay: number | null) {
-  const savedCallback = React.useRef<() => void>();
+  const savedCallback = React.useRef<() => void>(callback);
 
   React.useEffect(() => {
     savedCallback.current = callback;
