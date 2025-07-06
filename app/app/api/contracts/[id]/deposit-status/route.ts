@@ -114,20 +114,39 @@ export async function POST(
   try {
     const agreementId = params.id;
     const body = await req.json();
-    const { depositPaid } = body;
+    const { depositPaid, partyB_address } = body;
 
-    if (!agreementId || typeof depositPaid !== "boolean") {
+    if (!agreementId) {
       return NextResponse.json(
-        { success: false, error: "Missing or invalid required fields" },
+        { success: false, error: "Missing agreementId" },
         { status: 400 }
       );
     }
 
+    const agreement = await prisma.agreement.findUnique({
+      where: { id: agreementId },
+    });
+
+    if (!agreement) {
+      return NextResponse.json(
+        { success: false, error: "Agreement not found" },
+        { status: 404 }
+      );
+    }
+
+    const updateData: any = {};
+
+    if (depositPaid !== undefined) {
+      updateData.depositBPaid = depositPaid;
+    }
+
+    if (partyB_address) {
+      updateData.partyB_address = partyB_address;
+    }
+
     const updatedAgreement = await prisma.agreement.update({
       where: { id: agreementId },
-      data: {
-        depositBPaid: depositPaid,
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ success: true, agreement: updatedAgreement });

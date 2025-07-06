@@ -84,18 +84,26 @@ model DeploymentStep {
 }
 
 model Dispute {
-  id              String @id @default(cuid()) 
+  id              String    @id @default(cuid())
   agreementId     String
+  status          String // e.g., 'triaged_proceed', 'triaged_dismiss', 'negotiating', 'closed'
   opener          String // Address who opened dispute
-  openerEvidence  String? // IPFS CID of opener's evidence
-  openerSummary   String? // Opener's dispute summary
-  counterEvidence String? // IPFS CID of counter party's evidence  
-  counterSummary  String? // Counter party's summary
-  status          String @default("filed") // filed, triaged_dismiss, triaged_proceed, counter_evidence, under_review, resolved
-  triageResult    Json? // AI triage decision {action, reasoning}
-  finalResult     Json? // Final AI decision {decision, rationale, tx?}
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  openerEvidenceCids  String[]
+  openerSummary   String    @db.Text
+  requestedAmount Float   @default(0) // Amount the opener asks to withdraw
+  openingTxHash   String?
+  
+  responder         String?
+  responderEvidenceCids String[]
+  responderSummary  String? @db.Text // Counter party's summary
+  respondingTxHash  String?
+
+  mediationInputs Json?     // Inputs for the mediation AI
+  mediationResult Json?     // Result from the mediation AI
+  payoutTxHash    String?   // Hash of the multisig payout transaction
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   agreement Agreement @relation(fields: [agreementId], references: [id])
 }

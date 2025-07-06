@@ -1,143 +1,100 @@
 import OpenAI from "openai";
-import { uploadJsonToIPFS } from "../ipfs";
+import { fetchIpfsContent, uploadJsonToIPFS } from "../ipfs";
+import {
+  MEDIATOR_SYSTEM_PROMPT,
+  MEDIATOR_USER_PROMPT_TEMPLATE,
+} from "./prompts";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: process.env.OPEN_AI_API_KEY!,
 });
-
-export interface TriageInput {
-  agreementId: string;
-  contractText: string;
-  opener: string;
-  evidence: {
-    summary: string;
-    files: Array<{ cid: string; filename: string; mimeType: string }>;
-  };
-}
-
-export interface TriageDecision {
-  action: "dismiss" | "proceed";
-  reasoning: string;
-}
 
 export interface MediatorInput {
   agreementId: string;
   contractText: string;
-  tokenSymbol: string;
-  totalDeposit: number;
+  partyA_address: string | null | undefined;
+  partyB_address: string | null | undefined;
   opener: {
+    address: string;
     summary: string;
-    files: Array<{ cid: string; filename: string; mimeType: string }>;
+    cids: string[];
+    proposedResolution: string;
   };
-  counter: {
+  responder?: {
     summary: string;
-    files: Array<{ cid: string; filename: string; mimeType: string }>;
+    cids: string[];
   };
-  initiatorProposedTx?: string;
 }
 
 export interface MediatorDecision {
-  decision: "signInitiator" | "createNewTx" | "dismiss";
-  initiatorTx?: string;
-  newTx?: string;
+  decision: "approveResolution" | "doNothing" | "proposeResolution";
+  rationale: string;
   amountToA?: number;
   amountToB?: number;
-  rationale: string;
 }
 
-export async function runTriage(input: TriageInput): Promise<TriageDecision> {
-  const prompt = `
-You are a legal AI mediator evaluating whether a dispute has merit.
+async function getEvidenceContent(cids: string[]): Promise<string> {
+  if (!cids || cids.length === 0) {
+    return "No evidence provided.";
+  }
 
-### Contract
-${input.contractText}
-
-### Dispute Filed By: ${input.opener}
-Summary: ${input.evidence.summary}
-Files: ${input.evidence.files
-    .map((f) => `${f.filename} (${f.mimeType})`)
-    .join(", ")}
-
-Evaluate if this dispute should proceed to full mediation or be dismissed early.
-Consider: Is there a genuine breach? Are the claims substantiated? Is this frivolous?
-`;
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: "You are a fair legal mediator. Return only valid JSON.",
-      },
-      { role: "user", content: prompt },
-    ],
-    functions: [
-      {
-        name: "makeTriageDecision",
-        description: "Make a triage decision on the dispute",
-        parameters: {
-          type: "object",
-          properties: {
-            action: { type: "string", enum: ["dismiss", "proceed"] },
-            reasoning: {
-              type: "string",
-              description: "Brief explanation for the decision",
-            },
-          },
-          required: ["action", "reasoning"],
-        },
-      },
-    ],
-    function_call: { name: "makeTriageDecision" },
+  const contentPromises = cids.map(async (cid, index) => {
+    try {
+      const content = await fetchIpfsContent(cid);
+      return `--- Evidence File ${
+        index + 1
+      } (CID: ${cid}) ---\n${content}\n--- End of Evidence File ${
+        index + 1
+      } ---`;
+    } catch (error) {
+      console.error(`Failed to fetch content for CID ${cid}:`, error);
+      return `--- Evidence File ${
+        index + 1
+      } (CID: ${cid}) ---\n[Error fetching content]\n--- End of Evidence File ${
+        index + 1
+      } ---`;
+    }
   });
 
-  const result = response.choices[0]?.message?.function_call?.arguments;
-  if (!result) throw new Error("No triage decision received");
-
-  return JSON.parse(result) as TriageDecision;
+  const contents = await Promise.all(contentPromises);
+  return contents.join("\n\n");
 }
 
 export async function runMediator(
   input: MediatorInput
 ): Promise<MediatorDecision> {
-  const prompt = `
-You are a legal AI mediator making a final dispute resolution.
+  const openerEvidence = await getEvidenceContent(input.opener.cids);
+  const responderEvidence = await getEvidenceContent(
+    input.responder?.cids || []
+  );
 
-### Contract
-${input.contractText}
+  const partyAStatement =
+    input.opener.address === input.partyA_address
+      ? `${input.opener.summary}\n\n${openerEvidence}`
+      : `${input.responder?.summary ?? "No response"}\n\n${responderEvidence}`;
 
-Total Deposit: ${input.totalDeposit} ${input.tokenSymbol}
+  const partyBStatement =
+    input.opener.address === input.partyB_address
+      ? `${input.opener.summary}\n\n${openerEvidence}`
+      : `${input.responder?.summary ?? "No response"}\n\n${responderEvidence}`;
 
-### Dispute Opener Evidence
-Summary: ${input.opener.summary}
-Files: ${input.opener.files
-    .map((f) => `${f.filename} (${f.mimeType})`)
-    .join(", ")}
+  const prompt = await MEDIATOR_USER_PROMPT_TEMPLATE.format({
+    contract: input.contractText,
+    proposedResolution: input.opener.proposedResolution,
+    partyAStatement: partyAStatement,
+    partyBResponse: partyBStatement,
+  });
 
-### Counter Party Evidence  
-Summary: ${input.counter.summary}
-Files: ${input.counter.files
-    .map((f) => `${f.filename} (${f.mimeType})`)
-    .join(", ")}
-
-${
-  input.initiatorProposedTx
-    ? `### Proposed Transaction\n${input.initiatorProposedTx}`
-    : ""
-}
-
-Make your decision:
-- signInitiator: Approve the dispute opener's proposed transaction
-- createNewTx: Create a new transaction with different amounts  
-- dismiss: Close the dispute without any transaction
-`;
+  console.log("--- PROMPT SENT TO OPENAI ---");
+  console.log(prompt);
+  console.log("----------------------------");
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-4.1",
     messages: [
       {
         role: "system",
-        content: "You are a fair legal mediator. Output must be valid JSON.",
+        content: MEDIATOR_SYSTEM_PROMPT,
       },
       { role: "user", content: prompt },
     ],
@@ -150,20 +107,15 @@ Make your decision:
           properties: {
             decision: {
               type: "string",
-              enum: ["signInitiator", "createNewTx", "dismiss"],
+              enum: ["approveResolution", "doNothing", "proposeResolution"],
             },
-            initiatorTx: {
-              type: "string",
-              description: "Required if signInitiator",
-            },
-            newTx: { type: "string", description: "Required if createNewTx" },
             amountToA: {
               type: "number",
-              description: "Required if createNewTx",
+              description: "Required if decision is proposeResolution",
             },
             amountToB: {
               type: "number",
-              description: "Required if createNewTx",
+              description: "Required if decision is proposeResolution",
             },
             rationale: {
               type: "string",
@@ -178,6 +130,11 @@ Make your decision:
   });
 
   const result = response.choices[0]?.message?.function_call?.arguments;
+
+  console.log("--- RESPONSE FROM OPENAI ---");
+  console.log(result);
+  console.log("----------------------------");
+
   if (!result) throw new Error("No mediation decision received");
 
   const decision = JSON.parse(result) as MediatorDecision;
@@ -188,6 +145,10 @@ Make your decision:
     rationale: decision.rationale,
     timestamp: new Date().toISOString(),
     agreementId: input.agreementId,
+    ...(decision.decision === "proposeResolution" && {
+      amountToA: decision.amountToA,
+      amountToB: decision.amountToB,
+    }),
   };
 
   await uploadJsonToIPFS(rationaleJson);

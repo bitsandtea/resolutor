@@ -321,3 +321,31 @@ export async function uploadToIPFS(file: File): Promise<string> {
   const content = await file.text();
   return await pinToIPFSSimple(content, file.name);
 }
+
+/**
+ * Fetches content from IPFS using public gateways.
+ *
+ * @param {string} cid The IPFS CID to fetch.
+ * @returns {Promise<string>} The content of the file as a string.
+ */
+export async function fetchIpfsContent(cid: string): Promise<string> {
+  const gateways = [
+    `https://gateway.lighthouse.storage/ipfs/${cid}`,
+    `https://ipfs.io/ipfs/${cid}`,
+    `https://cloudflare-ipfs.com/ipfs/${cid}`,
+  ];
+
+  for (const gateway of gateways) {
+    try {
+      const response = await fetch(gateway);
+      if (response.ok) {
+        return await response.text();
+      }
+    } catch (gatewayError) {
+      console.warn(`Failed to fetch from ${gateway}:`, gatewayError);
+    }
+  }
+  throw new Error(
+    `Failed to fetch content for CID ${cid} from all IPFS gateways`
+  );
+}

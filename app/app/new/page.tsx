@@ -379,18 +379,29 @@ const NewContractPage: React.FC = () => {
     currentDefinition.placeholders.forEach(
       (placeholder: ContractPlaceholder) => {
         const regex = new RegExp(
-          `{{\s*${placeholder.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*}}`,
+          `{{\\s*${placeholder.id.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&"
+          )}\\s*}}`,
           "g"
         );
         const value = formData[placeholder.id];
+        let displayValue: string;
 
         if (value !== undefined) {
-          populatedText = populatedText.replace(regex, String(value));
+          if (typeof value === "boolean") {
+            displayValue = value ? "[x]" : "[ ]";
+          } else {
+            displayValue = String(value);
+          }
+          populatedText = populatedText.replace(regex, displayValue);
         } else if (placeholder.defaultValue !== undefined) {
-          populatedText = populatedText.replace(
-            regex,
-            String(placeholder.defaultValue)
-          );
+          if (typeof placeholder.defaultValue === "boolean") {
+            displayValue = placeholder.defaultValue ? "[x]" : "[ ]";
+          } else {
+            displayValue = String(placeholder.defaultValue);
+          }
+          populatedText = populatedText.replace(regex, displayValue);
         }
       }
     );

@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
         agreement = await prisma.agreement.update({
           where: { id: draftId },
           data: {
+            draftContent: content,
             templateType: templateType || existingAgreement.templateType,
             partyA: partyA.trim(),
             partyB: partyB && partyB.trim() ? partyB.trim() : null,
@@ -135,6 +136,7 @@ export async function POST(req: NextRequest) {
     if (!agreement) {
       agreement = await prisma.agreement.create({
         data: {
+          draftContent: content,
           templateType: templateType || "unknown",
           partyA: partyA.trim(),
           partyB: partyB && partyB.trim() ? partyB.trim() : null, // Store trimmed value or null

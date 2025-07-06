@@ -1,5 +1,7 @@
 # **LEASE AGREEMENT**
 
+_Note: Clauses marked with an `[X]` are considered active and part of this agreement._
+
 ### **Basic Rental Agreement or Residential Lease**
 
 This **Rental Agreement** (the "**Agreement**") sets forth the complete terms and conditions under which the parties, whose signatures appear below, agree to lease the premises.
@@ -74,6 +76,7 @@ If allowed:
 - Pet Deposit: \${{PET_DEPOSIT}}
 - Additional Monthly Rent: \${{PET_RENT}}
 - Insurance required per OWNER's discretion.
+- **Acknowledgement of Strict No-Dog Policy:** {{DOGS_PROHIBITED_CLAUSE}} Dogs are not allowed on the premises under any circumstance, including for temporary visits. This is a strict policy due to a severe allergy of an upstairs neighbor. Any violation will result in a strict $1000 fee being immediately deducted from the security deposit.
 
 ---
 

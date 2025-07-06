@@ -106,3 +106,20 @@ export const fetchDeploymentStatus = async (agreementId: string) => {
     return null;
   }
 };
+
+export const parseSignersData = (
+  signersData: string | object | null | undefined
+) => {
+  if (!signersData) {
+    return [];
+  }
+  if (typeof signersData === "string") {
+    try {
+      return JSON.parse(signersData);
+    } catch (error) {
+      console.error("Failed to parse signersData:", error);
+      return [];
+    }
+  }
+  return signersData;
+};

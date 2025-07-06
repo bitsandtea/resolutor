@@ -329,6 +329,29 @@ export const AgreementFactoryABI = [
         name: "_agreementId",
         type: "bytes32",
       },
+      {
+        internalType: "uint256",
+        name: "_amountToA",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "_amountToB",
+        type: "uint256",
+      },
+    ],
+    name: "openDisputeAndPropose",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "bytes32",
+        name: "_agreementId",
+        type: "bytes32",
+      },
     ],
     name: "approveResolution",
     outputs: [],

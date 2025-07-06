@@ -15,7 +15,7 @@ export async function GET(
       );
     }
 
-    const agreement = await prisma.agreement.findUnique({
+    const dbAgreement = await prisma.agreement.findUnique({
       where: { id: agreementId },
       include: {
         deploymentSteps: {
@@ -23,15 +23,26 @@ export async function GET(
             createdAt: "asc",
           },
         },
+        disputes: {
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
-    if (!agreement) {
+    if (!dbAgreement) {
       return NextResponse.json(
         { success: false, error: "Agreement not found" },
         { status: 404 }
       );
     }
+
+    const agreement = {
+      ...dbAgreement,
+      partyA: dbAgreement.partyA,
+      partyB: dbAgreement.partyB,
+    };
 
     return NextResponse.json({
       success: true,

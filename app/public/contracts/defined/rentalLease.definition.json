@@ -354,12 +354,21 @@
     },
     {
       "id": "PETS_ALLOWED_WRITTEN_AUTH",
-      "label": "Are pets allowed (with written authorization)?",
+      "label": "Are pets (other than dogs) allowed (with written authorization)?",
       "dataType": "boolean",
       "required": true,
       "sectionId": "pets",
       "uiHint": "checkbox",
       "defaultValue": false
+    },
+    {
+      "id": "DOGS_PROHIBITED_CLAUSE",
+      "label": "Acknowledgement of Strict No-Dog Policy",
+      "description": "Dogs are not allowed on the premises under any circumstance, including for temporary visits. This is a strict policy due to a severe allergy of an upstairs neighbor. Any violation will result in a strict $1000 fee being immediately deducted from the security deposit.",
+      "dataType": "boolean",
+      "required": true,
+      "sectionId": "pets",
+      "uiHint": "checkbox"
     },
     {
       "id": "PET_DEPOSIT",

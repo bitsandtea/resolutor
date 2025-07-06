@@ -430,7 +430,7 @@ const SignContractPage: React.FC = () => {
         await fetch(`/api/contracts/${agreementId}/deposit-status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ depositPaid: true }),
+          body: JSON.stringify({ depositPaid: true, partyB_address: address }),
         });
         refetchAgreementState();
         refetchProposalState();
@@ -444,6 +444,7 @@ const SignContractPage: React.FC = () => {
     refetchAgreementState,
     refetchProposalState,
     agreementId,
+    address,
   ]);
 
   const handleApproveToken = async () => {

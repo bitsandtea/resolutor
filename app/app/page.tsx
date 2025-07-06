@@ -256,17 +256,12 @@ const Dashboard: React.FC = () => {
                           View
                         </Link>
                         {project.status === "active" && (
-                          <button
+                          <Link
+                            href={`/dispute/${project.id}/open`}
                             className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            onClick={() => {
-                              // TODO: Implement open dispute modal/page in next phases
-                              alert(
-                                "Dispute functionality will be implemented in the next phase"
-                              );
-                            }}
                           >
                             Open Dispute
-                          </button>
+                          </Link>
                         )}
                       </div>
                     </td>
