@@ -16,6 +16,7 @@ import ContractFormStep from "./components/ContractFormStep";
 import ContractSelectionStep from "./components/ContractSelectionStep";
 import ContractSignersStep from "./components/ContractSignersStep";
 import DeploymentProgressStep from "./components/DeploymentProgressStep";
+import FaucetInfo from "./components/FaucetInfo";
 
 // Custom hook for intervals
 function useInterval(callback: () => void, delay: number | null) {
@@ -797,10 +798,22 @@ Powered by Resolutor`;
   // Show loading state while draft is being loaded
   if (isDraftLoading) {
     return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-600 text-lg">Loading saved draft...</p>
-      </div>
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="flex flex-col items-center justify-center flex-grow">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600 text-lg">Loading saved draft...</p>
+          </div>
+        </div>
+      </TransactionProvider>
     );
   }
 
@@ -810,177 +823,185 @@ Powered by Resolutor`;
     availableDefinitions.length === 0
   ) {
     return (
-      <ContractSelectionStep
-        availableDefinitions={availableDefinitions}
-        onSelectDefinition={setSelectedDefinitionFilename}
-        isLoading={isLoading}
-        errorMessage={errorMessage}
-      />
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
+            <ContractSelectionStep
+              availableDefinitions={availableDefinitions}
+              onSelectDefinition={setSelectedDefinitionFilename}
+              isLoading={isLoading}
+              errorMessage={errorMessage}
+            />
+          </div>
+        </div>
+      </TransactionProvider>
     );
   }
 
   if (uiStep === "selectContract") {
     return (
-      <ContractSelectionStep
-        availableDefinitions={availableDefinitions}
-        onSelectDefinition={setSelectedDefinitionFilename}
-        isLoading={isLoading}
-        errorMessage={errorMessage}
-      />
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
+            <ContractSelectionStep
+              availableDefinitions={availableDefinitions}
+              onSelectDefinition={setSelectedDefinitionFilename}
+              isLoading={isLoading}
+              errorMessage={errorMessage}
+            />
+          </div>
+        </div>
+      </TransactionProvider>
     );
   }
 
   if (isLoading && uiStep === "fillForm" && !currentDefinition) {
     return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <p className="text-gray-600 text-lg">
-          Loading contract details for {selectedDefinitionFilename}...
-        </p>
-        {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
-      </div>
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="flex flex-col items-center justify-center flex-grow">
+            <p className="text-gray-600 text-lg">
+              Loading contract details for {selectedDefinitionFilename}...
+            </p>
+            {errorMessage && (
+              <p className="text-red-500 mt-2">{errorMessage}</p>
+            )}
+          </div>
+        </div>
+      </TransactionProvider>
     );
   }
 
   if (uiStep === "fillForm" && !currentDefinition && !isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <p className="text-red-500 text-lg">
-          Failed to load contract details. Please try selecting a contract
-          again.
-        </p>
-        <button
-          onClick={() => {
-            setUiStep("selectContract");
-            setSelectedDefinitionFilename(null);
-            setErrorMessage(null);
-            setSigners([]);
-          }}
-          className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-        >
-          Back to Selection
-        </button>
-      </div>
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="flex flex-col items-center justify-center flex-grow">
+            <p className="text-red-500 text-lg">
+              Failed to load contract details. Please try selecting a contract
+              again.
+            </p>
+            <button
+              onClick={() => {
+                setUiStep("selectContract");
+                setSelectedDefinitionFilename(null);
+                setErrorMessage(null);
+                setSigners([]);
+              }}
+              className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+            >
+              Back to Selection
+            </button>
+          </div>
+        </div>
+      </TransactionProvider>
     );
   }
 
   if (uiStep === "deploymentProgress") {
     if (!contractResult && !preDeploymentIsLoading) {
       return (
-        <div className="flex flex-col items-center justify-center flex-grow">
-          <p className="text-red-500 text-lg">
-            Contract must be saved before deployment. Please try again.
-          </p>
-          <button
-            onClick={() => setUiStep("manageSigners")}
-            className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-          >
-            Back to Signers
-          </button>
-        </div>
+        <TransactionProvider>
+          <div className="flex flex-col items-center w-full">
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">
+              New Contract Wizard
+            </h1>
+
+            <div className="w-full max-w-3xl mb-6">
+              <FaucetInfo />
+            </div>
+
+            <div className="flex flex-col items-center justify-center flex-grow">
+              <p className="text-red-500 text-lg">
+                Contract must be saved before deployment. Please try again.
+              </p>
+              <button
+                onClick={() => setUiStep("manageSigners")}
+                className="mt-4 bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+              >
+                Back to Signers
+              </button>
+            </div>
+          </div>
+        </TransactionProvider>
       );
     }
 
     return (
-      <DeploymentProgressStep
-        agreementId={contractResult?.agreementId || ""}
-        onComplete={handleDeploymentComplete}
-        onError={handleDeploymentError}
-        onBack={handleDeploymentBack}
-        contractContent={generateContractText()}
-        fileName={contractName + ".md"}
-      />
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
+            <DeploymentProgressStep
+              agreementId={contractResult?.agreementId || ""}
+              onComplete={handleDeploymentComplete}
+              onError={handleDeploymentError}
+              onBack={handleDeploymentBack}
+              contractContent={generateContractText()}
+              fileName={contractName + ".md"}
+            />
+          </div>
+        </div>
+      </TransactionProvider>
     );
   }
 
   if (uiStep === "deploymentFailed") {
     return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <div className="text-center space-y-4 max-w-2xl">
-          <div className="bg-red-100 rounded-full p-6 mx-auto w-fit">
-            <svg
-              className="w-16 h-16 text-red-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
           </div>
 
-          <h1 className="text-3xl font-bold text-red-600">Deployment Failed</h1>
-          <p className="text-lg text-gray-600">
-            There was an error during the blockchain deployment process.
-          </p>
-
-          {errorMessage && (
-            <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-left">
-              <h3 className="font-semibold text-red-800 mb-2">
-                Error Details:
-              </h3>
-              <p className="text-red-700 text-sm">{errorMessage}</p>
-            </div>
-          )}
-
-          <div className="flex justify-center space-x-4 pt-6">
-            <button
-              onClick={() => setUiStep("deploymentProgress")}
-              className="bg-yellow-500 text-white py-3 px-6 rounded-lg hover:bg-yellow-600 font-medium"
-            >
-              🔄 Try Again
-            </button>
-            <button
-              onClick={() => setUiStep("manageSigners")}
-              className="bg-gray-500 text-white py-3 px-6 rounded-lg hover:bg-gray-600 font-medium"
-            >
-              ← Back to Signers
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <p className="text-gray-600 text-lg">
-          {(uiStep as UIStep) === "deploymentProgress"
-            ? `Processing blockchain deployment...`
-            : "Loading..."}
-        </p>
-        {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
-      </div>
-    );
-  }
-
-  // Show loading state during step transition
-  if (isStepTransitioning) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-grow">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-600 text-lg">Setting up signers...</p>
-      </div>
-    );
-  }
-
-  if (uiStep === "success" && contractResult && currentDefinition) {
-    const creatorSigner = signers.find((s) => s.role === "creator");
-    const otherSigners = signers.filter((s) => s.role !== "creator");
-
-    return (
-      <div className="flex flex-col items-center w-full">
-        <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
-          <div className="text-center space-y-6">
-            {/* Success Icon */}
-            <div className="flex justify-center">
-              <div className="bg-green-100 rounded-full p-6">
+          <div className="flex flex-col items-center justify-center flex-grow">
+            <div className="text-center space-y-4 max-w-2xl">
+              <div className="bg-red-100 rounded-full p-6 mx-auto w-fit">
                 <svg
-                  className="w-16 h-16 text-green-600"
+                  className="w-16 h-16 text-red-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -989,225 +1010,347 @@ Powered by Resolutor`;
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M5 13l4 4L19 7"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
                   />
                 </svg>
               </div>
-            </div>
 
-            {/* Success Message */}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                🎉 Contract Successfully Deployed!
+              <h1 className="text-3xl font-bold text-red-600">
+                Deployment Failed
               </h1>
               <p className="text-lg text-gray-600">
-                Your contract has been deployed to blockchain and is ready for
-                signatures
+                There was an error during the blockchain deployment process.
               </p>
+
+              {errorMessage && (
+                <div className="bg-red-50 border border-red-200 p-4 rounded-lg text-left">
+                  <h3 className="font-semibold text-red-800 mb-2">
+                    Error Details:
+                  </h3>
+                  <p className="text-red-700 text-sm">{errorMessage}</p>
+                </div>
+              )}
+
+              <div className="flex justify-center space-x-4 pt-6">
+                <button
+                  onClick={() => setUiStep("deploymentProgress")}
+                  className="bg-yellow-500 text-white py-3 px-6 rounded-lg hover:bg-yellow-600 font-medium"
+                >
+                  🔄 Try Again
+                </button>
+                <button
+                  onClick={() => setUiStep("manageSigners")}
+                  className="bg-gray-500 text-white py-3 px-6 rounded-lg hover:bg-gray-600 font-medium"
+                >
+                  ← Back to Signers
+                </button>
+              </div>
             </div>
+          </div>
+        </div>
+      </TransactionProvider>
+    );
+  }
 
-            {/* Contract Summary */}
-            <div className="bg-gray-50 p-6 rounded-lg text-left space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Contract Summary
-              </h2>
+  if (isLoading) {
+    return (
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-gray-700">
-                    Contract Name:
-                  </span>
-                  <p className="text-gray-600">{contractName}</p>
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="flex flex-col items-center justify-center flex-grow">
+            <p className="text-gray-600 text-lg">
+              {(uiStep as UIStep) === "deploymentProgress"
+                ? `Processing blockchain deployment...`
+                : "Loading..."}
+            </p>
+            {errorMessage && (
+              <p className="text-red-500 mt-2">{errorMessage}</p>
+            )}
+          </div>
+        </div>
+      </TransactionProvider>
+    );
+  }
+
+  // Show loading state during step transition
+  if (isStepTransitioning) {
+    return (
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="flex flex-col items-center justify-center flex-grow">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600 text-lg">Setting up signers...</p>
+          </div>
+        </div>
+      </TransactionProvider>
+    );
+  }
+
+  if (uiStep === "success" && contractResult && currentDefinition) {
+    const creatorSigner = signers.find((s) => s.role === "creator");
+    const otherSigners = signers.filter((s) => s.role !== "creator");
+
+    return (
+      <TransactionProvider>
+        <div className="flex flex-col items-center w-full">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            New Contract Wizard
+          </h1>
+
+          <div className="w-full max-w-3xl mb-6">
+            <FaucetInfo />
+          </div>
+
+          <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-xl">
+            <div className="text-center space-y-6">
+              {/* Success Icon */}
+              <div className="flex justify-center">
+                <div className="bg-green-100 rounded-full p-6">
+                  <svg
+                    className="w-16 h-16 text-green-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
                 </div>
-                <div>
-                  <span className="font-medium text-gray-700">
-                    Contract Type:
-                  </span>
-                  <p className="text-gray-600">
-                    {currentDefinition.templateMeta.title}
-                  </p>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">
-                    Agreement ID:
-                  </span>
-                  <p className="text-gray-600 font-mono text-xs">
-                    {contractResult.agreementId}
-                  </p>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">IPFS CID:</span>
-                  <p className="text-gray-600 font-mono text-xs">
-                    {contractResult.cid || deploymentState?.cid}
-                  </p>
-                </div>
-                {deploymentState?.flowContractAddr && (
+              </div>
+
+              {/* Success Message */}
+              <div>
+                <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                  🎉 Contract Successfully Deployed!
+                </h1>
+                <p className="text-lg text-gray-600">
+                  Your contract has been deployed to blockchain and is ready for
+                  signatures
+                </p>
+              </div>
+
+              {/* Contract Summary */}
+              <div className="bg-gray-50 p-6 rounded-lg text-left space-y-4">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  Contract Summary
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="font-medium text-gray-700">
-                      Flow Contract:
+                      Contract Name:
+                    </span>
+                    <p className="text-gray-600">{contractName}</p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">
+                      Contract Type:
+                    </span>
+                    <p className="text-gray-600">
+                      {currentDefinition.templateMeta.title}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">
+                      Agreement ID:
                     </span>
                     <p className="text-gray-600 font-mono text-xs">
-                      {deploymentState.flowContractAddr}
+                      {contractResult.agreementId}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">IPFS CID:</span>
+                    <p className="text-gray-600 font-mono text-xs">
+                      {contractResult.cid || deploymentState?.cid}
+                    </p>
+                  </div>
+                  {deploymentState?.flowContractAddr && (
+                    <div>
+                      <span className="font-medium text-gray-700">
+                        Flow Contract:
+                      </span>
+                      <p className="text-gray-600 font-mono text-xs">
+                        {deploymentState.flowContractAddr}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Signers Summary */}
+              <div className="bg-blue-50 p-6 rounded-lg text-left space-y-4">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  Signers & Next Steps
+                </h2>
+
+                {creatorSigner && (
+                  <div className="mb-4">
+                    <h3 className="font-medium text-gray-700 mb-2">
+                      Contract Creator
+                    </h3>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="font-medium">{creatorSigner.name}</p>
+                      <p className="text-gray-600">{creatorSigner.email}</p>
+                      <p className="text-blue-600 text-sm">
+                        💰 Deposit Amount: $
+                        {(creatorSigner.depositAmount || 0).toFixed(2)}
+                      </p>
+                      <p className="text-green-600 text-sm">
+                        ✅ Contract deployed on blockchain
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {otherSigners.length > 0 && (
+                  <div>
+                    <h3 className="font-medium text-gray-700 mb-2">
+                      Pending Signers
+                    </h3>
+                    <div className="space-y-2">
+                      {otherSigners.map((signer) => (
+                        <div
+                          key={signer.id}
+                          className="bg-white p-3 rounded border"
+                        >
+                          <p className="font-medium">{signer.name}</p>
+                          <p className="text-gray-600">{signer.email}</p>
+                          <p className="text-blue-600 text-sm">
+                            💰 Deposit Amount: $
+                            {(signer.depositAmount || 0).toFixed(2)}
+                          </p>
+                          <p className="text-orange-600 text-sm">
+                            ⏳ Awaiting signature
+                          </p>
+
+                          {/* Share Options for Each Signer */}
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-sm font-medium text-gray-700 mb-2">
+                              Share signing link with {signer.name}:
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                  copyToClipboard(signUrl);
+                                }}
+                                className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
+                              >
+                                📋 Copy Link
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                  const message = generateShareableMessage(
+                                    contractName,
+                                    creatorSigner?.name || "Contract Creator",
+                                    signUrl
+                                  );
+                                  copyToClipboard(message);
+                                }}
+                                className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                              >
+                                📋 Copy Message
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                  const message = generateShareableMessage(
+                                    contractName,
+                                    creatorSigner?.name || "Contract Creator",
+                                    signUrl
+                                  );
+                                  shareViaWhatsApp(message);
+                                }}
+                                className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                              >
+                                💬 WhatsApp
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                  const message = generateShareableMessage(
+                                    contractName,
+                                    creatorSigner?.name || "Contract Creator",
+                                    signUrl
+                                  );
+                                  shareViaTelegram(message);
+                                }}
+                                className="bg-blue-400 text-white px-3 py-1 rounded text-sm hover:bg-blue-500"
+                              >
+                                ✈️ Telegram
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
+                                  const subject = `Contract Signature Request: ${contractName}`;
+                                  const message = generateShareableMessage(
+                                    contractName,
+                                    creatorSigner?.name || "Contract Creator",
+                                    signUrl
+                                  );
+                                  shareViaEmail(subject, message);
+                                }}
+                                className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
+                              >
+                                📧 Email
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {otherSigners.length === 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 p-4 rounded">
+                    <p className="text-yellow-800 text-sm">
+                      <strong>Note:</strong> No additional signers were added.
+                      This contract is ready for your signature only.
                     </p>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Signers Summary */}
-            <div className="bg-blue-50 p-6 rounded-lg text-left space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Signers & Next Steps
-              </h2>
-
-              {creatorSigner && (
-                <div className="mb-4">
-                  <h3 className="font-medium text-gray-700 mb-2">
-                    Contract Creator
-                  </h3>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="font-medium">{creatorSigner.name}</p>
-                    <p className="text-gray-600">{creatorSigner.email}</p>
-                    <p className="text-blue-600 text-sm">
-                      💰 Deposit Amount: $
-                      {(creatorSigner.depositAmount || 0).toFixed(2)}
-                    </p>
-                    <p className="text-green-600 text-sm">
-                      ✅ Contract deployed on blockchain
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {otherSigners.length > 0 && (
-                <div>
-                  <h3 className="font-medium text-gray-700 mb-2">
-                    Pending Signers
-                  </h3>
-                  <div className="space-y-2">
-                    {otherSigners.map((signer) => (
-                      <div
-                        key={signer.id}
-                        className="bg-white p-3 rounded border"
-                      >
-                        <p className="font-medium">{signer.name}</p>
-                        <p className="text-gray-600">{signer.email}</p>
-                        <p className="text-blue-600 text-sm">
-                          💰 Deposit Amount: $
-                          {(signer.depositAmount || 0).toFixed(2)}
-                        </p>
-                        <p className="text-orange-600 text-sm">
-                          ⏳ Awaiting signature
-                        </p>
-
-                        {/* Share Options for Each Signer */}
-                        <div className="mt-3 pt-3 border-t">
-                          <p className="text-sm font-medium text-gray-700 mb-2">
-                            Share signing link with {signer.name}:
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => {
-                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
-                                copyToClipboard(signUrl);
-                              }}
-                              className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
-                            >
-                              📋 Copy Link
-                            </button>
-                            <button
-                              onClick={() => {
-                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
-                                const message = generateShareableMessage(
-                                  contractName,
-                                  creatorSigner?.name || "Contract Creator",
-                                  signUrl
-                                );
-                                copyToClipboard(message);
-                              }}
-                              className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-                            >
-                              📋 Copy Message
-                            </button>
-                            <button
-                              onClick={() => {
-                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
-                                const message = generateShareableMessage(
-                                  contractName,
-                                  creatorSigner?.name || "Contract Creator",
-                                  signUrl
-                                );
-                                shareViaWhatsApp(message);
-                              }}
-                              className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
-                            >
-                              💬 WhatsApp
-                            </button>
-                            <button
-                              onClick={() => {
-                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
-                                const message = generateShareableMessage(
-                                  contractName,
-                                  creatorSigner?.name || "Contract Creator",
-                                  signUrl
-                                );
-                                shareViaTelegram(message);
-                              }}
-                              className="bg-blue-400 text-white px-3 py-1 rounded text-sm hover:bg-blue-500"
-                            >
-                              ✈️ Telegram
-                            </button>
-                            <button
-                              onClick={() => {
-                                const signUrl = `${window.location.origin}/sign/${contractResult.agreementId}`;
-                                const subject = `Contract Signature Request: ${contractName}`;
-                                const message = generateShareableMessage(
-                                  contractName,
-                                  creatorSigner?.name || "Contract Creator",
-                                  signUrl
-                                );
-                                shareViaEmail(subject, message);
-                              }}
-                              className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
-                            >
-                              📧 Email
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {otherSigners.length === 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded">
-                  <p className="text-yellow-800 text-sm">
-                    <strong>Note:</strong> No additional signers were added.
-                    This contract is ready for your signature only.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-center space-x-4 pt-6">
-              <button
-                onClick={resetWizard}
-                className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 font-medium"
-              >
-                Create Another Contract
-              </button>
-              <button
-                onClick={() => (window.location.href = "/")}
-                className="bg-gray-500 text-white py-3 px-6 rounded-lg hover:bg-gray-600 font-medium"
-              >
-                Go to Dashboard
-              </button>
+              {/* Action Buttons */}
+              <div className="flex justify-center space-x-4 pt-6">
+                <button
+                  onClick={resetWizard}
+                  className="bg-blue-500 text-white py-3 px-6 rounded-lg hover:bg-blue-600 font-medium"
+                >
+                  Create Another Contract
+                </button>
+                <button
+                  onClick={() => (window.location.href = "/")}
+                  className="bg-gray-500 text-white py-3 px-6 rounded-lg hover:bg-gray-600 font-medium"
+                >
+                  Go to Dashboard
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </TransactionProvider>
     );
   }
 
@@ -1217,6 +1360,11 @@ Powered by Resolutor`;
         <h1 className="text-4xl font-bold text-gray-800 mb-4">
           New Contract Wizard
         </h1>
+
+        <div className="w-full max-w-3xl mb-6">
+          <FaucetInfo />
+        </div>
+
         {currentDefinition && uiStep === "fillForm" ? (
           <>
             <p className="text-lg text-gray-600 mb-2">

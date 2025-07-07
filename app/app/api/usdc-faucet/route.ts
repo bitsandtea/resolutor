@@ -4,14 +4,19 @@ import { createWalletClient, http, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { flowTestnet } from "viem/chains";
 
+// In-memory store for rate limiting
+const requestTimestamps = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_REQUESTS_PER_WINDOW = 1;
+
 // Validate Ethereum address format
 const validateAddress = (address: string): boolean => {
   return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
 };
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const { address } = await request.json();
+    const address = request.nextUrl.searchParams.get("address");
 
     // Validate required parameters
     if (!address) {
@@ -31,6 +36,26 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Rate limiting check
+    const now = Date.now();
+    const userTimestamps = (requestTimestamps.get(address) || []).filter(
+      (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS
+    );
+
+    if (userTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
+      const timeToWait = RATE_LIMIT_WINDOW_MS - (now - userTimestamps[0]);
+      const hoursToWait = (timeToWait / (1000 * 60 * 60)).toFixed(1);
+      return NextResponse.json(
+        {
+          error: `Too many requests. Please try again in ${hoursToWait} hours.`,
+        },
+        { status: 429 }
+      );
+    }
+
+    // Add current request timestamp
+    requestTimestamps.set(address, [...userTimestamps, now]);
 
     // Get environment variables
     const faucetPrivateKey = process.env.USDC_FAUCET_PKEY;
@@ -68,45 +93,45 @@ export async function POST(request: NextRequest) {
       transport: http(flowRpcUrl),
     });
 
-    // Mint 100,000 tokens (100k with 18 decimals)
-    const mintAmount = parseEther("100000");
+    // Transfer 1,000 tokens (1k with 18 decimals)
+    const transferAmount = parseEther("1000");
 
-    console.log(`Minting ${mintAmount} tokens to ${address}`);
+    console.log(`Transferring ${transferAmount} tokens to ${address}`);
 
-    // Call mint function on the ERC20 contract
+    // Call transfer function on the ERC20 contract
     const txHash = await walletClient.writeContract({
       address: mockERC20Address as `0x${string}`,
       abi: MockERC20ABI,
-      functionName: "mint",
-      args: [address as `0x${string}`, mintAmount],
+      functionName: "transfer",
+      args: [address as `0x${string}`, transferAmount],
     });
 
     console.log(`Faucet transaction successful: ${txHash}`);
 
     return NextResponse.json({
       success: true,
-      message: "Tokens minted successfully",
+      message: "Tokens transferred successfully",
       txHash,
-      amount: "100000",
+      amount: "1000",
       recipient: address,
       explorerUrl: `https://evm-testnet.flowscan.io/tx/${txHash}`,
     });
   } catch (error) {
     console.error("Faucet error:", error);
 
-    let errorMessage = "Failed to mint tokens";
+    let errorMessage = "Failed to transfer tokens";
     let statusCode = 500;
 
     if (error instanceof Error) {
       const errorMsg = error.message.toLowerCase();
 
       if (errorMsg.includes("insufficient funds")) {
-        errorMessage = "Faucet has insufficient funds";
+        errorMessage = "Faucet has insufficient funds to send transaction";
         statusCode = 503;
       } else if (errorMsg.includes("execution reverted")) {
         errorMessage =
-          "Contract execution failed - may not have permission to mint";
-        statusCode = 403;
+          "Contract execution failed. The faucet may have an insufficient token balance.";
+        statusCode = 500;
       } else if (
         errorMsg.includes("network") ||
         errorMsg.includes("connection")
